@@ -80,7 +80,10 @@ RecentHub/
 │   ├── TECH_DESIGN.md           # 深度架构与高阶算法设计
 │   ├── DATA_DICTIONARY.md       # 数据结构与 SQLite 表模型
 │   └── ROADMAP.md               # 演进里程碑规划
-├── tests/                       # 自动化测试与性能基准套件
+├── tests/                       # 界面素材生成器
+│   ├── make_app_icon.py         # 应用图标 (SVG → 多尺寸 ICO + PNG)
+│   ├── make_btn_icons.py        # 按钮图标
+│   └── make_chevrons.py         # 箭头/方向指示素材
 ├── main.py                      # 单实例主入口
 └── run.bat                      # 一键静默启动脚本
 ```

@@ -20,7 +20,8 @@ class TrayService(QObject):
         self.tray_icon = QSystemTrayIcon(self.main_window)
         
         # 加载专属高清极简图标
-        icon_path = os.path.join(resource_dir(), "app_icon.png")
+        # 托盘只有 16~32px，用多尺寸 .ico 可直接命中原生小帧，比缩放 512px png 更锐利
+        icon_path = os.path.join(resource_dir(), "app_icon.ico")
         if os.path.exists(icon_path):
             self.icon = QIcon(icon_path)
         else:

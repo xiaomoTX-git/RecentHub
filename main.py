@@ -51,7 +51,8 @@ def main():
     app.setStyle("Fusion")
     app.setQuitOnLastWindowClosed(False)
     from PySide6.QtGui import QIcon
-    icon_path = os.path.join(resource_dir(), "app_icon.png")
+    # 多尺寸 .ico：任务栏/Alt-Tab 按实际像素密度取对应帧，避免单张 png 缩放发虚
+    icon_path = os.path.join(resource_dir(), "app_icon.ico")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 

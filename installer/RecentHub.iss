@@ -39,6 +39,8 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
+; 安装程序自身也带应用图标 (不设的话 Setup.exe 显示 Inno Setup 默认图标)
+SetupIconFile=..\app\resources\app_icon.ico
 ; 安装前自动结束占用文件的旧实例 (只匹配本程序 exe 名，不影响其它进程)
 CloseApplications=yes
 RestartApplications=no

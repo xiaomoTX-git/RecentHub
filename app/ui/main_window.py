@@ -125,7 +125,9 @@ class MainWindow(QMainWindow):
         self._current_seen_paths: Set[str] = set()
 
         self.res_dir = resource_dir()
-        icon_path = os.path.join(self.res_dir, "app_icon.png")
+        # 用多尺寸 .ico 而非单张 .png：ico 内含 16~256px 各档原生渲染帧，
+        # 窗口/任务栏按实际像素密度取帧，高 DPI 下不会因缩放而发虚
+        icon_path = os.path.join(self.res_dir, "app_icon.ico")
         self.app_icon = QIcon(icon_path) if os.path.exists(icon_path) else QIcon()
         self.setWindowIcon(self.app_icon)
 

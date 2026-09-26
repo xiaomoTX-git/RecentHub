@@ -1,0 +1,13 @@
+# RecentHub 运行与打包依赖 (Python 3.12 / Windows x64)
+#
+# 安装：uv pip install -r requirements.txt
+#      或  .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# GUI 框架 (Fluent Acrylic 主界面 / 托盘 / 全局事件过滤)
+PySide6==6.11.2
+
+# Windows 原生能力：注册表自启、COM 调用 (Shell.Application / ADODB 检索)、快捷键钩子
+pywin32==312
+
+# 中文拼音首字母 / 全拼检索
+pypinyin==0.55.0

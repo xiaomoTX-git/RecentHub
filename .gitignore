@@ -1,0 +1,26 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# ---- 虚拟环境 (本机 673MB，绝不能入库) ----
+.venv/
+venv/
+env/
+
+# ---- PyInstaller 构建产物 (dist 含 153MB 成品，由 RecentHub.spec 重新构建) ----
+build/
+dist/
+
+# ---- 运行时用户数据 (窗口尺寸/主题/自启开关等本机状态) ----
+data/
+
+# ---- 编辑器与系统 ----
+.idea/
+.vscode/
+*.swp
+*.log
+Thumbs.db
+Desktop.ini

@@ -21,6 +21,22 @@ class FullscreenService:
         if sys.platform != "win32" or not user32 or not shell32:
             return False
 
+        # 0. 前台是桌面外壳 (纯桌面/任务栏) 时绝不拦截：此时双击 Ctrl 是用户明确的唤出意图。
+        #    Shell 的 SHQueryUserNotificationState 在"纯桌面"场景会误报全屏忙 (QUNS_BUSY/QUNS_APP)，
+        #    不提前排除会造成"有窗口时能唤出、只有纯桌面唤不出"的怪象
+        hwnd = 0
+        try:
+            hwnd = user32.GetForegroundWindow()
+            if not hwnd or hwnd == ignore_hwnd or hwnd == user32.GetDesktopWindow() or hwnd == user32.GetShellWindow():
+                return False
+
+            buf = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, buf, 256)
+            if buf.value in ("Progman", "WorkerW", "Shell_TrayWnd", "Windows.UI.Core.CoreWindow"):
+                return False
+        except Exception:
+            pass
+
         # 1. 微软官方 Shell API: SHQueryUserNotificationState
         # QUNS_BUSY (2) = 全屏独占 (游戏/影视)
         # QUNS_RUNNING_D3D_FULL_SCREEN (3) = Direct3D 3D 全屏游戏
@@ -36,15 +52,7 @@ class FullscreenService:
 
         # 2. 前台活动窗口几何尺寸判定 (精准覆盖无边框全屏游戏、全屏网页视频、播放器如 PotPlayer 等)
         try:
-            hwnd = user32.GetForegroundWindow()
-            if not hwnd or hwnd == ignore_hwnd or hwnd == user32.GetDesktopWindow() or hwnd == user32.GetShellWindow():
-                return False
-
-            # 排除桌面与任务栏外壳
-            buf = ctypes.create_unicode_buffer(256)
-            user32.GetClassNameW(hwnd, buf, 256)
-            cname = buf.value
-            if cname in ("Progman", "WorkerW", "Shell_TrayWnd", "Windows.UI.Core.CoreWindow"):
+            if not hwnd:
                 return False
 
             rect = wintypes.RECT()

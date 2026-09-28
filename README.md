@@ -114,8 +114,6 @@ RecentHub/
 │   ├── services/      # 打开、图标、扫描、热键、全屏免打扰
 │   └── ui/            # 双模态界面、主题系统与托盘
 ├── installer/         # Inno Setup 脚本与版本资源
-├── tests/             # 界面素材生成器（SVG → 多尺寸 ICO / 图标）
-├── docs/              # 技术设计、数据字典、路线图
 └── main.py            # 单实例主入口
 ```
 

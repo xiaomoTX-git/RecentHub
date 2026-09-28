@@ -34,8 +34,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist\installer
 OutputBaseFilename={#AppName}_Setup_v{#AppVersion}
-Compression=lzma2/max
-SolidCompression=yes
+; 安装速度优先：lzma2/max + 固体压缩会把上百个文件塞进一个巨型压缩块，
+; 解压必须整体顺序进行、内存占用高，用户侧装起来就是在干等。
+; lzma2/fast 非固体压缩包体略大一点，但可逐文件快速解压，安装体感快很多
+Compression=lzma2/fast
+SolidCompression=no
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}

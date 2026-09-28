@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import (
     QKeySequence, QShortcut, QAction, QClipboard, QCursor,
-    QIcon, QPixmap
+    QIcon, QPixmap, QPainter, QPen, QColor
 )
 
 # GetAsyncKeyState 句柄惰性初始化缓存 (None=未初始化, False=不可用)
@@ -58,6 +58,68 @@ class CleanItemViewStyle(QProxyStyle):
         if element == QStyle.PrimitiveElement.PE_PanelItemViewRow:
             return
         super().drawPrimitive(element, option, painter, widget)
+
+
+class SearchLoadingIndicator(QWidget):
+    """深度全盘检索进行中的极简旋转指示器 (圆头弧线匀速自转，配色随主题)
+
+    挂在搜索行下方的居中 loading 行里，与"正在全盘检索…"文案一起出现，
+    结果到达或兜底超时后整行隐去，不占用常规布局高度。
+    """
+
+    def __init__(self, parent=None, size: int = 18):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        # 纯展示控件：不接受鼠标事件，避免在搜索框下方形成一个"死区"
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._angle = 0
+        self._color = QColor(139, 92, 246)
+        self._timer = QTimer(self)
+        self._timer.setInterval(16)  # ~60FPS 匀速旋转
+        self._timer.timeout.connect(self._tick)
+
+    def set_color(self, color_hex: str):
+        self._color = QColor(color_hex)
+        self.update()
+
+    def start(self):
+        if not self._timer.isActive():
+            self._angle = 0
+            self._timer.start()
+        self.update()
+
+    def stop(self):
+        self._timer.stop()
+        self.update()
+
+    def _tick(self):
+        self._angle = (self._angle + 12) % 360
+        self.update()
+
+    def paintEvent(self, event):
+        # 空闲态不绘制任何像素：控件本身常驻布局（避免输入框宽度随检索反复伸缩跳动），
+        # 但未检索时完全不占用视觉，保持极简条的干净
+        if not self._timer.isActive():
+            return
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = self.rect().adjusted(2, 2, -2, -2)
+
+        # 底圈轨道：同色低透明度，交代"正在旋转"的完整圆环轮廓
+        track = QColor(self._color)
+        track.setAlpha(45)
+        pen_track = QPen(track, 2)
+        pen_track.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen_track)
+        p.drawArc(rect, 0, 360 * 16)
+
+        # 高亮弧：约 100° 的圆头弧线，负角度即顺时针旋转
+        pen_arc = QPen(self._color, 2)
+        pen_arc.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen_arc)
+        p.drawArc(rect, -self._angle * 16, -100 * 16)
+        p.end()
 
 
 class ScanWorker(QThread):
@@ -239,6 +301,10 @@ class MainWindow(QMainWindow):
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table_view.setShowGrid(False)
+        # QTableView 的 wordWrap 默认为 True：长路径会在反斜杠处被硬折成两行
+        # ("C:" 一行 + "\Users\..." 一行)，行高被撑破且语义割裂。
+        # 关掉后由委托按 ElideRight 单行截断为 "C:\Users\...\RecentH..."，干净且易读
+        self.table_view.setWordWrap(False)
         self.table_view.verticalHeader().setVisible(False)
         self.table_view.verticalHeader().setDefaultSectionSize(row_h)
         self.table_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
@@ -256,6 +322,23 @@ class MainWindow(QMainWindow):
         self.table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.table_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
+        # 检索 loading 行：位于搜索行正下方、水平居中 (比原来挤在输入框右侧更醒目)
+        self.loading_row = QWidget()
+        self.loading_row.setObjectName("LoadingRow")
+        loading_layout = QHBoxLayout(self.loading_row)
+        loading_layout.setContentsMargins(0, 2, 0, 2)
+        loading_layout.setSpacing(8)
+        loading_layout.addStretch()
+        self.search_loading = SearchLoadingIndicator(size=18)
+        loading_layout.addWidget(self.search_loading)
+        self.loading_label = QLabel("正在全盘检索…")
+        self.loading_label.setObjectName("LoadingLabel")
+        loading_layout.addWidget(self.loading_label)
+        loading_layout.addStretch()
+        # 空闲时整行不占任何高度：极简条仍保持 48px，不会被撑高
+        self.loading_row.hide()
+        self.card_layout.addWidget(self.loading_row)
+
         self.card_layout.addWidget(self.table_view)
 
         # 3. 底部极简状态栏 (Raycast / Fluent 现代按键徽标风格)
@@ -715,6 +798,8 @@ class MainWindow(QMainWindow):
             self.async_search_timer.stop()
         if hasattr(self, 'live_search_worker') and self.live_search_worker:
             self.live_search_worker.cancel_pending()
+        # 检索任务已全部作废，指示器同步熄灭，避免窗口唤醒后仍残留旋转动画
+        self._stop_search_loading()
 
         # 2. 如果在 Mode A 且无搜索文本，清空列表释放行对象缓存
         self._panel_forced_open = False
@@ -809,7 +894,7 @@ class MainWindow(QMainWindow):
         th = get_theme(theme_id)
         self.current_theme_def = th
         cfg = ConfigManager.load()
-        self.current_opacity = float(cfg.get("card_opacity", 0.95))
+        self.current_opacity = float(cfg.get("card_opacity", 1.0))
         self.setStyleSheet(build_qss(th, opacity=self.current_opacity))
         if hasattr(self, 'row_delegate'):
             self.row_delegate.set_theme_colors(
@@ -839,6 +924,9 @@ class MainWindow(QMainWindow):
             p = os.path.join(self.res_dir, icon_file)
             if os.path.exists(p):
                 self.settings_btn.setIcon(QIcon(p))
+        if hasattr(self, 'search_loading'):
+            # 指示器取主题强调色：深色下是沉浸紫，浅色下是高对比蓝，两级都足够醒目
+            self.search_loading.set_color(th.accent_color)
         if hasattr(self, 'mode_toggle_btn'):
             wb_file = "icon_workbench_dark.png" if th.is_dark else "icon_workbench_light.png"
             cap_file = "icon_capsule_dark.png" if th.is_dark else "icon_capsule_light.png"
@@ -971,6 +1059,13 @@ class MainWindow(QMainWindow):
         self.async_search_timer.setInterval(80)
         self.async_search_timer.timeout.connect(self._on_async_search_timeout)
 
+        # 检索 loading 兜底超时：若外部 Everything/Windows Search 迟迟不返回，
+        # 也不能让指示器永久旋转（视觉上会像"卡死"）
+        self._loading_timeout = QTimer(self)
+        self._loading_timeout.setSingleShot(True)
+        self._loading_timeout.setInterval(5000)
+        self._loading_timeout.timeout.connect(self._stop_search_loading)
+
         self.search_edit.textChanged.connect(self._on_text_changed)
         self.search_edit.returnPressed.connect(self._open_selected_item)
         self.search_edit.installEventFilter(self)
@@ -1017,11 +1112,31 @@ class MainWindow(QMainWindow):
             self.async_search_timer.stop()
             if hasattr(self, 'live_search_worker') and self.live_search_worker:
                 self.live_search_worker.cancel_pending()
+            self._stop_search_loading()
+
+    def _start_search_loading(self):
+        """进入深度检索态：点亮搜索行下方的旋转指示器 + 提示文案"""
+        if hasattr(self, 'loading_row'):
+            self.loading_row.show()
+        if hasattr(self, 'search_loading'):
+            self.search_loading.start()
+        if hasattr(self, '_loading_timeout'):
+            self._loading_timeout.start()
+
+    def _stop_search_loading(self):
+        """退出检索态：整行隐去 (结果到达 / 清空输入 / 窗口隐藏 / 兜底超时统一入口)"""
+        if hasattr(self, 'search_loading'):
+            self.search_loading.stop()
+        if hasattr(self, 'loading_row'):
+            self.loading_row.hide()
+        if hasattr(self, '_loading_timeout'):
+            self._loading_timeout.stop()
 
     def _on_async_search_timeout(self):
         q = self.search_edit.text().strip()
         if q and len(q) >= 2 and hasattr(self, 'live_search_worker') and self.live_search_worker:
             self.live_search_worker.submit_search(q)
+            self._start_search_loading()
 
     def reload_local_data(self):
         """Tier 1 本地瞬间秒出：毫秒级完成本地已索引历史命中并即时刷新视图 (0ms延迟)"""
@@ -1058,11 +1173,14 @@ class MainWindow(QMainWindow):
         # Tier 2 异步流式全盘检索 (交由单例常驻 Worker 安全排队，彻底消除多线程撕裂与闪退)
         if q and len(q) >= 2 and hasattr(self, 'live_search_worker') and self.live_search_worker:
             self.live_search_worker.submit_search(q)
+            self._start_search_loading()
 
     def _on_async_results_ready(self, query: str, live_items: List[RecentItem]):
         current_q = self.search_edit.text().strip()
         if query != current_q:
+            # 结果属于已过时的旧查询：新查询仍在途中，指示器必须继续旋转
             return
+        self._stop_search_loading()
 
         to_append = []
         for lf in live_items:

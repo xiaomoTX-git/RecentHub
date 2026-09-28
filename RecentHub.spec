@@ -69,6 +69,31 @@ a = Analysis(
 pyz = PYZ(a.pure)
 
 
+# 精简运行时体积：下面这些 Qt 动态库，纯 QtWidgets 应用永远不会加载，
+# 留在包里只会拖慢下载与安装解压 (合计约 37MB，占总体积三成)
+#   opengl32sw.dll     软件 OpenGL 回退；本应用走 Qt raster 光栅引擎，不创建 GL 上下文
+#   Qt6Quick / Qt6Qml* QML / Quick 运行时；全项目零 QML
+#   Qt6Pdf             PDF 渲染；PDF 一律交给系统默认程序打开
+#   Qt6VirtualKeyboard 虚拟键盘插件
+_UNUSED_BINARIES = (
+    "opengl32sw.dll",
+    "qt6quick",
+    "qt6qml",
+    "qt6pdf",
+    "qt6virtualkeyboard",
+)
+
+
+def _need_binary(entry) -> bool:
+    name = entry[0].replace("\\", "/").lower()
+    return not any(tok in name for tok in _UNUSED_BINARIES)
+
+
+# 在 Analysis 之后过滤：只影响最终 COLLECT 打进产物里的文件，
+# 不需要重新做一遍依赖分析，也就不会产生 "missing module" 类的误报
+a.binaries = [b for b in a.binaries if _need_binary(b)]
+
+
 exe = EXE(
     pyz,
     a.scripts,

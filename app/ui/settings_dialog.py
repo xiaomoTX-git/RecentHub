@@ -193,7 +193,7 @@ class SettingsDialog(QDialog):
         elif saved_th in ("obsidian_dark", "nord_aurora", "cyberpunk_neon"):
             saved_th = "dark"
         self.current_theme_id = saved_th
-        self.current_opacity = float(self.cfg.get("card_opacity", 0.95))
+        self.current_opacity = float(self.cfg.get("card_opacity", 1.0))
 
         # 防抖持久化定时器 (解耦拖动时的高频写磁盘，保证 60FPS 极速丝滑)
         self.opacity_save_timer = QTimer(self)

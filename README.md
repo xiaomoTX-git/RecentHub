@@ -10,9 +10,9 @@
 
 | 版本 | 说明 | 下载 |
 | :--- | :--- | :--- |
-| **v1.0.0** | Windows 10/11 64 位安装包 (~33 MB)，免管理员权限 | **[RecentHub_Setup_v1.0.0.exe](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
+| **v1.0.0** | Windows 10/11 64 位安装包 (~28 MB)，免管理员权限 | **[RecentHub_Setup_v1.0.0.exe](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
 
-全部版本见 [Releases](https://github.com/xiaomoTX-git/RecentHub/releases)。安装包为**当前用户级安装**，全程无 UAC 弹窗；桌面快捷方式与开机自启默认勾选（自启为静默驻留托盘，不弹窗打扰）。
+全部版本见 [Releases](https://github.com/xiaomoTX-git/RecentHub/releases)，逐版本改动见 [CHANGELOG](CHANGELOG.md)。安装包为**当前用户级安装**，全程无 UAC 弹窗；桌面快捷方式与开机自启默认勾选（自启为静默驻留托盘，不弹窗打扰）。
 
 > 卸载时用户数据（`%APPDATA%\RecentHub` 的配置与数据库）默认保留，便于重装后无缝续用。
 
@@ -45,9 +45,13 @@ RecentHub 只读这些既有痕迹，**零全盘遍历、零文件系统监控�
 
 ### 4. 双模态融合界面
 - **Mode A · 极简胶囊**：居中无边框悬浮条，失焦或 `Esc` 即刻隐藏，`Enter` 秒开，方向键无缝穿透导航；
-- **Mode B · 详细工作台**：`Tab` 一键展开为多列表格，按最后使用时间 / 打开频次 / 文件类型排序与分面过滤。
+- **Mode B · 详细工作台**：`Tab` 一键展开为多列表格，按最后使用时间 / 打开频次 / 文件类型排序与分面过滤；
+- **高对比纯色主题**：深色为纯黑底白字、浅色为纯白底黑字，底色完全不透明，不受壁纸与身后窗口影响；长路径单行省略号截断，绝不折行破版。
 
-### 5. 全局唤出与免打扰
+### 5. 惰性接力式深度检索
+本地轨迹未命中时才按需接力 Everything (`es.exe`) 与 Windows Search 做全盘检索，检索期间在搜索行下方居中显示旋转指示器与文字提示，并带 5 秒兜底超时——**平时零开销，极端情况下也不会卡住界面**。
+
+### 6. 全局唤出与免打扰
 双击 `Ctrl`（或自定义热键）随时唤出；检测到全屏游戏 / 观影 / PPT 放映时自动静默不打扰，且不会误判纯桌面场景。
 
 ---

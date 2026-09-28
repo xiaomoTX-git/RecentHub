@@ -45,14 +45,14 @@ THEMES: Dict[str, ThemeDefinition] = {
         name="浅色",
         description="纯白高对比，白底黑字清晰锐利",
         is_dark=False,
-        # 底色刻意接近不透明：卡片是半透明毛玻璃，若自身透明度过高，
-        # 深色壁纸会透上来把"白底"染灰，黑字随之失去对比度
-        card_bg="rgba(255, 255, 255, 0.97)",
-        card_border="1px solid rgba(0, 0, 0, 0.10)",
+        # 完全不透明：卡片一旦带透明度，深色壁纸透上来会把"纯白"染成灰调，
+        # 与"白底黑字"的高对比目标直接冲突。需要通透感由设置里的透明度滑块自行下调
+        card_bg="rgba(255, 255, 255, 1.00)",
+        card_border="1px solid rgba(0, 0, 0, 0.08)",
         accent_color="#0067C0",
         accent_hover="#1875D1",
         text_primary="#0A0A0F",
-        text_secondary="#43434F",
+        text_secondary="#2E2E38",
         text_placeholder="#6B6B79",
         row_selected_bg="rgba(0, 103, 192, 0.12)",
         row_selected_border="rgba(0, 103, 192, 0.55)",
@@ -72,13 +72,14 @@ THEMES: Dict[str, ThemeDefinition] = {
         name="深色",
         description="纯黑高对比，黑底白字沉浸专注",
         is_dark=True,
-        card_bg="rgba(10, 10, 14, 0.97)",
-        card_border="1px solid rgba(255, 255, 255, 0.14)",
+        # 纯黑完全不透明：半透明会让身后窗口的内容透上来，整体发灰发脏
+        card_bg="rgba(10, 10, 14, 1.00)",
+        card_border="1px solid rgba(255, 255, 255, 0.12)",
         accent_color="#8B5CF6",
         accent_hover="#A78BFA",
         text_primary="#FFFFFF",
-        text_secondary="#B9BDC7",
-        text_placeholder="#8E939E",
+        text_secondary="#D7DBE3",
+        text_placeholder="#9AA0AC",
         row_selected_bg="rgba(255, 255, 255, 0.16)",
         row_selected_border="rgba(139, 92, 246, 0.65)",
         row_hover_bg="rgba(255, 255, 255, 0.06)",
@@ -146,6 +147,12 @@ def get_card_bg_with_opacity(card_bg_str: str, opacity: float) -> str:
 def build_qss(theme: ThemeDefinition, opacity: Optional[float] = None) -> str:
     """构建极致极简主义的现代 QSS"""
     card_bg = get_card_bg_with_opacity(theme.card_bg, opacity) if opacity is not None else theme.card_bg
+    # 滚动条用"黑/白半透明"而不是中性灰：中性灰是最容易被察觉的脏色来源，
+    # 黑白半透明与底色同源，视觉上仍然是一套纯黑纯白体系
+    if theme.is_dark:
+        sb_handle, sb_handle_hover = "rgba(255, 255, 255, 0.22)", "rgba(255, 255, 255, 0.40)"
+    else:
+        sb_handle, sb_handle_hover = "rgba(0, 0, 0, 0.20)", "rgba(0, 0, 0, 0.38)"
     return f"""
 QMainWindow {{
     background: transparent;
@@ -244,13 +251,13 @@ QScrollBar:vertical {{
 }}
 
 QScrollBar::handle:vertical {{
-    background: rgba(140, 140, 160, 0.35);
+    background: {sb_handle};
     min-height: 24px;
     border-radius: 2px;
 }}
 
 QScrollBar::handle:vertical:hover {{
-    background: rgba(140, 140, 160, 0.65);
+    background: {sb_handle_hover};
 }}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
@@ -265,5 +272,16 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     background: transparent;
     border-top: 1px solid {theme.btn_border};
     padding: 2px 4px;
+}}
+
+#LoadingRow {{
+    background: transparent;
+}}
+
+#LoadingLabel {{
+    background: transparent;
+    color: {theme.accent_color};
+    font-size: 12px;
+    font-weight: 600;
 }}
 """

@@ -22,16 +22,19 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "dropdown_height": 380,
     "bar_height": 48,
     
-    # 主题模式 (跟随系统 / 浅色 / 深色)
-    "theme": "system",                      # system | light | dark
+    # 主题模式 (跟随系统 / 浅色 / 深色)：产品默认即为纯黑深色
+    "theme": "dark",                        # system | light | dark
+
+    # 卡片不透明度：默认接近不透明，保证黑底白字 / 白底黑字的对比度不被壁纸透色破坏
+    "card_opacity": 0.95,
 
     # 全屏免打扰保护 (检测到打游戏、看电影等全屏状态时不被快捷键唤出)
     "fullscreen_dnd": True,
 
     # 现代组件库与设计系统 Tokens (Windows 11 Fluent + Raycast)
     "design_system": "fluent_acrylic",      # fluent_acrylic | raycast_glass | pure_minimal
-    "accent_color": "#0067C0",              # Fluent 经典系统主色
-    "accent_hover_color": "#1875D1",        # Fluent 悬停提亮色
+    "accent_color": "#8B5CF6",              # 与默认深色主题一致的沉浸紫
+    "accent_hover_color": "#A78BFA",        # 悬停提亮色
     "row_height": 38,                       # 呼吸感现代行高 (标准 38px)
     "card_radius": 14,                      # 主窗口圆角
     "pill_radius": 6,                       # 条目胶囊圆角
@@ -67,7 +70,7 @@ class ConfigManager:
                 cfg["workbench_height"] = max(280, min(int(cfg.get("workbench_height", 450)), 900))
                 cfg["dropdown_height"] = max(140, min(int(cfg.get("dropdown_height", 380)), 850))
                 if cfg.get("theme") not in ("system", "light", "dark"):
-                    cfg["theme"] = "system"
+                    cfg["theme"] = "dark"
                 cfg["bar_height"] = max(42, min(int(cfg.get("bar_height", 48)), 72))
                 cfg["row_height"] = max(32, min(int(cfg.get("row_height", 38)), 48))
                 return cfg

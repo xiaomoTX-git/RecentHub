@@ -1,89 +1,122 @@
-# RecentHub (Windows 极轻量最近记录秒搜与重开工具)
+# RecentHub
 
-RecentHub 是一款专为 Windows 设计的极轻量、秒开、无后台 I/O 负担的最近使用记录聚合与检索重开工具。
-区别于 Everything 扫描全盘，RecentHub 专注于 Windows 系统已经留存的活动踪迹，**启动时间 < 300ms，内存占用 < 30MB，检索延迟 < 6ms**，兼具 **Spotlight 极速悬浮条** 与 **Everything 级多列详细工作台** 双重体验。
+**Windows 极轻量"最近使用记录"秒搜与重开工具。**
 
----
-
-## 🌟 核心特性
-
-1. **A/B 双模态融合架构 (平滑一键切换)**：
-   - **Mode A (Spotlight 极速胶囊)**：默认居中无边框悬浮条，失焦或按 `Esc` 瞬间隐藏，`Enter` 秒开，支持键盘上下键无缝穿透导航。
-   - **Mode B (Everything 级详细工作台)**：按 `Tab` 键一键无缝展开为多列完整表格，支持按最后使用时间、打开频次、文件类型进行排序与分面过滤。
-2. **零三方大型依赖的纯二进制流式解析**：
-   - 彻底摒弃 `win32com` COM 组件与 `olefile` 第三方库，采用 Python 原生 `struct` 实现 **MS-SHLLINK (.lnk)** 与 **MS-CFB (AutomaticDestinations Jump Lists)** 极速零拷贝解析，单文件解析耗时压降至 **0.08ms**。
-3. **中文拼音首字母双轨极速检索 (双数组二分映射)**：
-   - 内置微秒级 GB2312 区间映射与常用字补丁，输入 `wz` 即可瞬时匹配 `文字记录.txt` 或 `微信.exe`，吞吐量高达 **33 万词/秒**。
-   - 双轨检索架构：1~2 字符优先走紧凑拼音索引，>=3 字符走 SQLite 原生 **FTS5 Trigram** 倒排索引，10,000 条记录检索仅需 **4~6ms**。
-4. **惰性增量扫描 (Lazy Polling)**：
-   - 绝不挂载常驻系统的文件系统监控器（零后台 CPU 占用与句柄消耗）。
-   - 仅在用户真实唤起或键入搜索时进行 `mtime` 比对，无变动直接复用缓存（0 I/O 开销）。
-5. **系统托盘与单实例互斥通信**：
-   - 依托 `QLocalServer` 保证单实例常驻，重复启动自动唤醒并激活前台窗口。
+启动 < 300ms · 内存 < 30MB · 检索延迟 < 6ms —— 不做全盘扫描，而是直接解析 Windows 已经为你留存好的活动轨迹。
 
 ---
 
-## ⚡ 性能测评实测 (基于 10,000 条记录基准测试)
+## ⬇️ 下载
 
-| 测评项目 | 目标要求 | 实测表现 | 评估结论 |
+| 版本 | 说明 | 下载 |
+| :--- | :--- | :--- |
+| **v1.0.0** | Windows 10/11 64 位安装包 (~33 MB)，免管理员权限 | **[RecentHub_Setup_v1.0.0.exe](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
+
+全部版本见 [Releases](https://github.com/xiaomoTX-git/RecentHub/releases)。安装包为**当前用户级安装**，全程无 UAC 弹窗；桌面快捷方式与开机自启默认勾选（自启为静默驻留托盘，不弹窗打扰）。
+
+> 卸载时用户数据（`%APPDATA%\RecentHub` 的配置与数据库）默认保留，便于重装后无缝续用。
+
+---
+
+## 为什么不用 Everything
+
+Everything 的强项是"扫描全盘"，代价是首次建索引慢、常驻监控占用文件句柄。而 **"最近用过什么"这件事，Windows 早就替你记好了**：
+
+- `%APPDATA%\Microsoft\Windows\Recent` 的 .lnk 快捷方式
+- Jump Lists（AutomaticDestinations / CustomDestinations）
+- UserAssist 注册表（含启动次数与最后使用时间）
+- Office 14.0 / 15.0 / 16.0 MRU
+
+RecentHub 只读这些既有痕迹，**零全盘遍历、零文件系统监控器、零后台 I/O 负担**。
+
+---
+
+## 核心技术
+
+### 1. 零三方依赖的纯二进制流式解析
+彻底弃用 `win32com` COM 组件与 `olefile`，用 Python 原生 `struct` 直接实现 **MS-SHLLINK (.lnk)** 与 **MS-CFB (Jump List)** 的零拷贝解析，单文件解析耗时压到 **0.08ms**。
+
+### 2. 中文拼音首字母双轨检索
+- **短查询（1~2 字符）**：走内置 GB2312 区间映射 + 常用字补丁构成的紧凑双数组二分索引，`wz` 即可命中 `文字记录.txt`，吞吐 **33 万词/秒**；
+- **长查询（≥3 字符）**：走 SQLite 原生 **FTS5 Trigram** 倒排索引，万级记录检索 **4~6ms**。
+
+### 3. 惰性增量扫描（Lazy Polling）
+不挂载常驻系统的文件系统监控器（零后台 CPU 占用与句柄消耗）。仅在窗口真实唤出或键入搜索时做 `mtime` 比对，无变动直接复用缓存，即 **0 I/O 开销**。
+
+### 4. 双模态融合界面
+- **Mode A · 极简胶囊**：居中无边框悬浮条，失焦或 `Esc` 即刻隐藏，`Enter` 秒开，方向键无缝穿透导航；
+- **Mode B · 详细工作台**：`Tab` 一键展开为多列表格，按最后使用时间 / 打开频次 / 文件类型排序与分面过滤。
+
+### 5. 全局唤出与免打扰
+双击 `Ctrl`（或自定义热键）随时唤出；检测到全屏游戏 / 观影 / PPT 放映时自动静默不打扰，且不会误判纯桌面场景。
+
+---
+
+## ⚡ 性能实测（10,000 条记录基准）
+
+| 测评项目 | 目标 | 实测 | 结论 |
 | :--- | :--- | :--- | :--- |
-| **拼音首字母引擎吞吐量** | > 50,000 词/秒 | **333,830 词/秒** (10,000词耗时 29.96ms) | 远超预期 (达标 6.6 倍) |
-| **存储层批量建库与 FTS5 索引** | < 1,000ms | **218.97ms** (0.022ms/条) | 极速入库 |
-| **拼音首字母搜索 (`wx`)** | < 15ms | **4.24ms** | 瞬时响应 |
-| **拼音多字简码 (`kfxm`)** | < 15ms | **6.48ms** | 瞬时响应 |
-| **中文词汇全文匹配 (`需求分析`)** | < 15ms | **5.87ms** | 瞬时响应 |
-| **置顶空查询排序** | < 10ms | **2.22ms** | 瞬时响应 |
-| **真实 Windows 系统全源扫描** | < 200ms | **28.33ms** (解析 75 条真实系统轨迹) | 极佳性能 |
+| 拼音首字母引擎吞吐量 | > 50,000 词/秒 | **333,830 词/秒** | 达标 6.6 倍 |
+| 存储层批量建库 + FTS5 索引 | < 1,000ms | **218.97ms**（0.022ms/条） | 极速入库 |
+| 拼音首字母搜索（`wx`） | < 15ms | **4.24ms** | 瞬时响应 |
+| 拼音多字简码（`kfxm`） | < 15ms | **6.48ms** | 瞬时响应 |
+| 中文词汇全文匹配（`需求分析`） | < 15ms | **5.87ms** | 瞬时响应 |
+| 置顶空查询排序 | < 10ms | **2.22ms** | 瞬时响应 |
+| 真实系统全源扫描 | < 200ms | **28.33ms**（75 条真实轨迹） | 极佳 |
 
 ---
 
-## 🚀 快速启动与使用
+## 快捷键
 
-### 1. 一键运行
-直接双击根目录下的 `run.bat`，或在命令行中运行：
+| 按键 | 行为 |
+| :--- | :--- |
+| `Tab` | 在极简胶囊与详细工作台之间切换 |
+| `Enter` | 打开当前选中项 |
+| `Alt + Enter` | 在资源管理器中定位并高亮该文件 |
+| `↑` / `↓` | 直接切换选中条目（支持长按连续巡航） |
+| `Esc` | 隐藏窗口，退避至托盘常驻 |
+| 右键 | 上下文菜单：管理员运行 / 打开目录 / 复制路径 / 置顶 / 删除记录 |
+
+---
+
+## 从源码运行与构建
+
 ```bash
-RecentHub/.venv/Scripts/pythonw.exe main.py
+# 1. 运行（首次会自动创建 .venv 并安装依赖）
+run.bat
+
+# 2. 打包为独立 exe（PyInstaller onedir）
+.venv\Scripts\pyinstaller.exe --noconfirm --clean RecentHub.spec
+
+# 3. 生成安装包（需 Inno Setup 6）
+"$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\RecentHub.iss
 ```
 
-### 2. 交互快捷键一览
-- **`Tab`**：在 Mode A (悬浮胶囊) 与 Mode B (详细工作台) 之间平滑无缝切换。
-- **`Enter`**：立即打开当前选中的文档/应用/目录。
-- **`Alt + Enter`**：在 Windows 文件资源管理器中打开并高亮选中该文件。
-- **`方向键 Up / Down`**：在搜索输入框中直接上下切换选择条目。
-- **`Esc`**：立刻隐藏窗口，退避至托盘常驻。
-- **`鼠标右键`**：呼出上下文菜单（管理员运行、打开目录、复制绝对路径、置顶/取消置顶、删除记录）。
+运行时路径策略：资源只读（源码 `app\resources` / 打包 `_MEIPASS\resources`），用户数据可写（源码 `data\` / 安装版 `%APPDATA%\RecentHub`）。
+
+依赖：`PySide6`、`pywin32`、`pypinyin`（见 [requirements.txt](requirements.txt)）。
 
 ---
 
-## 📂 项目结构规范
+## 项目结构
 
 ```text
 RecentHub/
 ├── app/
-│   ├── core/                    # 数据模型 (slots 紧凑结构) 与配置
-│   ├── parsers/                 # 零依赖二进制流式解析器
-│   │   ├── lnk_parser.py        # MS-SHLLINK 纯 struct 解析器
-│   │   ├── cfb_parser.py        # MS-CFB JumpList 纯 struct 解析器
-│   │   ├── userassist_parser.py # UserAssist 注册表 ROT13 与时间解析器
-│   │   ├── pinyin_engine.py     # 中文拼音首字母紧凑二分映射引擎
-│   │   └── time_helper.py       # FILETIME 与 Unix 时间戳统一转换
-│   ├── collectors/              # 惰性增量数据源采集器
-│   │   ├── recent_collector.py  # %APPDATA%\...\Recent
-│   │   ├── jumplist_collector.py# Jump Lists (Automatic & CustomDestinations)
-│   │   ├── userassist_collector.py # UserAssist 注册表
-│   │   └── mru_collector.py     # Office 14.0/15.0/16.0 MRU
-│   ├── aggregator/              # 规范化与去重合并器
-│   ├── storage/                 # SQLite 3 + FTS5 Trigram 高性能存储
-│   ├── services/                # 打开服务、图标服务与调度服务
-│   └── ui/                      # PySide6 双模态交互界面与托盘
-├── docs/                        # 技术设计、数据字典与研发路线图
-│   ├── TECH_DESIGN.md           # 深度架构与高阶算法设计
-│   ├── DATA_DICTIONARY.md       # 数据结构与 SQLite 表模型
-│   └── ROADMAP.md               # 演进里程碑规划
-├── tests/                       # 界面素材生成器
-│   ├── make_app_icon.py         # 应用图标 (SVG → 多尺寸 ICO + PNG)
-│   ├── make_btn_icons.py        # 按钮图标
-│   └── make_chevrons.py         # 箭头/方向指示素材
-├── main.py                      # 单实例主入口
-└── run.bat                      # 一键静默启动脚本
+│   ├── parsers/       # 零依赖二进制解析：.lnk / CFB JumpList / UserAssist / 拼音引擎
+│   ├── collectors/    # 惰性增量采集：Recent / JumpList / UserAssist / Office MRU
+│   ├── aggregator/    # 规范化与去重合并
+│   ├── storage/       # SQLite 3 + FTS5 Trigram
+│   ├── services/      # 打开、图标、扫描、热键、全屏免打扰
+│   └── ui/            # 双模态界面、主题系统与托盘
+├── installer/         # Inno Setup 脚本与版本资源
+├── tests/             # 界面素材生成器（SVG → 多尺寸 ICO / 图标）
+├── docs/              # 技术设计、数据字典、路线图
+└── main.py            # 单实例主入口
 ```
+
+---
+
+## License
+
+[MIT](LICENSE)

@@ -226,7 +226,7 @@ class MainWindow(QMainWindow):
         self.table_view.setModel(self.table_model)
         
         cfg = ConfigManager.load()
-        accent = cfg.get("accent_color", "#0067C0")
+        accent = cfg.get("accent_color", "#8B5CF6")
         row_h = cfg.get("row_height", 38)
         
         self.row_delegate = ModernRowDelegate(
@@ -630,9 +630,12 @@ class MainWindow(QMainWindow):
                 self.table_view.hide()
                 self.status_bar.hide()
                 if self.isVisible():
-                    self._animate_height(self.custom_bar_height)
+                    # 高度收敛到极简条后再回到屏幕正中：极简条是"居中悬浮"形态，
+                    # 若沿用工作台/下拉展开时留下的高度锚点，整条会明显偏上或偏下
+                    self._animate_height(self.custom_bar_height, on_finished=self._center_window)
                 else:
                     self.resize(self.custom_width, self.custom_bar_height)
+                    self._center_window()
             else:
                 self.table_view.show()
                 if abs(self.height() - self.custom_dropdown_height) > 4:
@@ -656,7 +659,8 @@ class MainWindow(QMainWindow):
             h_header.resizeSection(2, 100)
             h_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
 
-            self._animate_height(self.custom_workbench_height)
+            # 工作台是整屏居中的大面板，高度收敛后同样回到屏幕正中
+            self._animate_height(self.custom_workbench_height, on_finished=self._center_window)
 
         if recenter and not self._user_has_dragged:
             self._center_window()
@@ -805,7 +809,7 @@ class MainWindow(QMainWindow):
         th = get_theme(theme_id)
         self.current_theme_def = th
         cfg = ConfigManager.load()
-        self.current_opacity = float(cfg.get("card_opacity", 0.65))
+        self.current_opacity = float(cfg.get("card_opacity", 0.95))
         self.setStyleSheet(build_qss(th, opacity=self.current_opacity))
         if hasattr(self, 'row_delegate'):
             self.row_delegate.set_theme_colors(

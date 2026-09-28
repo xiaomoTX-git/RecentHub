@@ -39,51 +39,53 @@ class ThemeDefinition:
 
 # 核心两套极致黑白质感设计
 THEMES: Dict[str, ThemeDefinition] = {
-    # 1. 浅色 (通透冷白微霜，明朗通透)
+    # 1. 浅色 (纯白高对比：白底黑字)
     "light": ThemeDefinition(
         id="light",
         name="浅色",
-        description="纯净透亮冷白微霜，Windows 经典雅致",
+        description="纯白高对比，白底黑字清晰锐利",
         is_dark=False,
-        card_bg="rgba(255, 255, 255, 0.65)",
-        card_border="1px solid rgba(255, 255, 255, 0.90)",
+        # 底色刻意接近不透明：卡片是半透明毛玻璃，若自身透明度过高，
+        # 深色壁纸会透上来把"白底"染灰，黑字随之失去对比度
+        card_bg="rgba(255, 255, 255, 0.97)",
+        card_border="1px solid rgba(0, 0, 0, 0.10)",
         accent_color="#0067C0",
         accent_hover="#1875D1",
-        text_primary="#181824",
-        text_secondary="#666677",
-        text_placeholder="#8A8C9E",
-        row_selected_bg="rgba(0, 103, 192, 0.10)",
-        row_selected_border="rgba(0, 103, 192, 0.50)",
-        row_hover_bg="rgba(0, 0, 0, 0.04)",
-        row_hover_border="rgba(0, 0, 0, 0.08)",
-        kbd_bg="rgba(255, 255, 255, 0.85)",
-        kbd_border="rgba(0, 0, 0, 0.10)",
-        kbd_text="#2C2C3A",
+        text_primary="#0A0A0F",
+        text_secondary="#43434F",
+        text_placeholder="#6B6B79",
+        row_selected_bg="rgba(0, 103, 192, 0.12)",
+        row_selected_border="rgba(0, 103, 192, 0.55)",
+        row_hover_bg="rgba(0, 0, 0, 0.05)",
+        row_hover_border="rgba(0, 0, 0, 0.10)",
+        kbd_bg="rgba(0, 0, 0, 0.06)",
+        kbd_border="rgba(0, 0, 0, 0.12)",
+        kbd_text="#15151C",
         btn_bg="rgba(0, 0, 0, 0.05)",
-        btn_border="rgba(0, 0, 0, 0.08)",
+        btn_border="rgba(0, 0, 0, 0.10)",
         btn_hover_bg="rgba(0, 0, 0, 0.10)"
     ),
 
-    # 2. 深色 (Raycast 黑曜石深邃黑，沉浸通透)
+    # 2. 深色 (纯黑高对比：黑底白字)
     "dark": ThemeDefinition(
         id="dark",
         name="深色",
-        description="Raycast 纯黑曜石深邃沉浸，专注无扰",
+        description="纯黑高对比，黑底白字沉浸专注",
         is_dark=True,
-        card_bg="rgba(22, 22, 28, 0.72)",
-        card_border="1px solid rgba(255, 255, 255, 0.16)",
+        card_bg="rgba(10, 10, 14, 0.97)",
+        card_border="1px solid rgba(255, 255, 255, 0.14)",
         accent_color="#8B5CF6",
         accent_hover="#A78BFA",
-        text_primary="#F3F4F6",
-        text_secondary="#9CA3AF",
-        text_placeholder="#6B7280",
+        text_primary="#FFFFFF",
+        text_secondary="#B9BDC7",
+        text_placeholder="#8E939E",
         row_selected_bg="rgba(255, 255, 255, 0.16)",
         row_selected_border="rgba(139, 92, 246, 0.65)",
         row_hover_bg="rgba(255, 255, 255, 0.06)",
         row_hover_border="rgba(255, 255, 255, 0.12)",
-        kbd_bg="rgba(255, 255, 255, 0.12)",
-        kbd_border="rgba(255, 255, 255, 0.20)",
-        kbd_text="#E5E7EB",
+        kbd_bg="rgba(255, 255, 255, 0.14)",
+        kbd_border="rgba(255, 255, 255, 0.22)",
+        kbd_text="#FFFFFF",
         btn_bg="rgba(255, 255, 255, 0.10)",
         btn_border="rgba(255, 255, 255, 0.16)",
         btn_hover_bg="rgba(255, 255, 255, 0.18)"

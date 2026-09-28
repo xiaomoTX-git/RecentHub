@@ -7,8 +7,8 @@
 
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 1, 0, 0),
+    prodvers=(1, 1, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -23,22 +23,22 @@ VSVersionInfo(
           '080404b0',
           [StringStruct('CompanyName', 'RecentHub'),
            StringStruct('FileDescription', 'RecentHub 最近记录秒搜与重开工具'),
-           StringStruct('FileVersion', '1.0.0.0'),
+           StringStruct('FileVersion', '1.1.0.0'),
            StringStruct('InternalName', 'RecentHub'),
            StringStruct('LegalCopyright', 'Copyright (C) 2026 RecentHub'),
            StringStruct('OriginalFilename', 'RecentHub.exe'),
            StringStruct('ProductName', 'RecentHub'),
-           StringStruct('ProductVersion', '1.0.0')]),
+           StringStruct('ProductVersion', '1.1.0')]),
         StringTable(
           '040904b0',
           [StringStruct('CompanyName', 'RecentHub'),
            StringStruct('FileDescription', 'RecentHub - Recent Files Instant Search'),
-           StringStruct('FileVersion', '1.0.0.0'),
+           StringStruct('FileVersion', '1.1.0.0'),
            StringStruct('InternalName', 'RecentHub'),
            StringStruct('LegalCopyright', 'Copyright (C) 2026 RecentHub'),
            StringStruct('OriginalFilename', 'RecentHub.exe'),
            StringStruct('ProductName', 'RecentHub'),
-           StringStruct('ProductVersion', '1.0.0')])
+           StringStruct('ProductVersion', '1.1.0')])
       ]),
     VarFileInfo([VarStruct('Translation', [2052, 1200, 1033, 1200])])
   ]

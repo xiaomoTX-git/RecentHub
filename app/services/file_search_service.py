@@ -6,6 +6,7 @@ RecentHub 全文件实时检索服务 (参照 Everything 原理与 Windows 索�
 - 支持 Everything 本地 IPC / es 极速命令行
 """
 
+import logging
 import os
 import sys
 import time
@@ -14,6 +15,8 @@ from typing import List, Set
 from app.core.models import RecentItem
 from app.aggregator.normalizer import normalize_item
 from app.core.paths import is_frozen
+
+logger = logging.getLogger(__name__)
 
 # 保证 win32 模块可用 (仅源码运行需要；打包后依赖已随 exe 冻结)
 if is_frozen():
@@ -130,7 +133,8 @@ class FileSearchService:
                                     if len(results) >= limit:
                                         return results
             except Exception:
-                pass
+                # Everything 通道不可用 (未安装/超时) 属可降级路径，后续通道继续兜底
+                logger.debug("Everything 命令行检索通道失败", exc_info=True)
 
         # 4. Windows Search 原生 OLE DB 全盘检索 (安全初始化后台 COM 线程单元)
         try:
@@ -138,7 +142,7 @@ class FileSearchService:
                 import pythoncom
                 pythoncom.CoInitialize()
             except Exception:
-                pass
+                logger.debug("pythoncom.CoInitialize 失败", exc_info=True)
 
             import win32com.client
             conn = win32com.client.Dispatch("ADODB.Connection")
@@ -174,10 +178,11 @@ class FileSearchService:
                         rs.MoveNext()
                     rs.Close()
                 except Exception:
-                    pass
+                    logger.debug("Windows Search 单关键词查询失败: %s", kw, exc_info=True)
             conn.Close()
         except Exception:
-            pass
+            # 非预期：Windows Search 组件缺失/COM 不可用会整体丢掉这条召回通道
+            logger.warning("Windows Search 检索通道整体不可用", exc_info=True)
         finally:
             try:
                 import pythoncom

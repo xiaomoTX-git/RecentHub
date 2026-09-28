@@ -6,6 +6,7 @@ RecentHub Windows 全局热键与双击 Ctrl 唤出服务
 - 支持快捷键编辑期间无冲突静默暂停与恢复
 """
 
+import logging
 import sys
 import time
 import ctypes
@@ -14,6 +15,8 @@ from typing import Callable, Optional, Tuple
 
 from PySide6.QtCore import QAbstractNativeEventFilter, QCoreApplication
 from app.core.config import ConfigManager
+
+logger = logging.getLogger(__name__)
 
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
@@ -98,7 +101,7 @@ def _setup_hook_prototypes():
         user32.UnregisterHotKey.argtypes = [ctypes.c_void_p, ctypes.c_int]
         user32.UnregisterHotKey.restype = wintypes.BOOL
     except Exception:
-        pass
+        logger.debug("Win32 钩子 API 原型声明失败", exc_info=True)
 
 
 _setup_hook_prototypes()
@@ -158,7 +161,8 @@ class DoubleCtrlDetector:
                             if not self._ctrl_is_down:
                                 self._other_key_pressed = False
                 except Exception:
-                    pass
+                    # 低级键盘钩子回调必须绝对安静且极快返回，异常仅记日志绝不外抛
+                    logger.debug("双击 Ctrl 钩子回调异常", exc_info=True)
 
             return user32.CallNextHookEx(self._hook, nCode, wParam, lParam)
 
@@ -175,10 +179,11 @@ class DoubleCtrlDetector:
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, self.callback)
         except Exception:
+            logger.debug("QTimer 投递失败，改为直接同步回调", exc_info=True)
             try:
                 self.callback()
             except Exception:
-                pass
+                logger.warning("热键触发回调执行失败", exc_info=True)
 
     def stop(self):
         if self._hook and user32:
@@ -205,7 +210,7 @@ class HotkeyNativeEventFilter(QAbstractNativeEventFilter):
                     self.on_hotkey()
                     return True, 0
                 except Exception:
-                    pass
+                    logger.warning("WM_HOTKEY 唤出回调执行失败", exc_info=True)
         return False, 0
 
 
@@ -278,6 +283,7 @@ class HotkeyService:
             self.is_registered = False
             return False
         except Exception:
+            logger.warning("RegisterHotKey 注册失败: %s", hk_norm, exc_info=True)
             self.is_registered = False
             return False
 
@@ -291,7 +297,7 @@ class HotkeyService:
             try:
                 user32.UnregisterHotKey(None, RECENT_HUB_HOTKEY_ID)
             except Exception:
-                pass
+                logger.debug("UnregisterHotKey 失败 (可能本就未注册)", exc_info=True)
         self.is_registered = False
 
     def pause(self):

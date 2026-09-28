@@ -210,6 +210,32 @@ QWidget {{
     background-color: {theme.btn_hover_bg};
 }}
 
+#FilterRow {{
+    background: transparent;
+}}
+
+#FilterPill {{
+    background-color: {theme.btn_bg};
+    border: 1px solid {theme.btn_border};
+    border-radius: 9px;
+    color: {theme.text_secondary};
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+}}
+
+#FilterPill:hover {{
+    background-color: {theme.btn_hover_bg};
+    color: {theme.text_primary};
+}}
+
+#FilterPill:checked {{
+    background-color: {theme.accent_color};
+    border-color: {theme.accent_color};
+    color: #FFFFFF;
+    font-weight: 600;
+}}
+
 QHeaderView {{
     background-color: transparent;
     border: none;

@@ -81,6 +81,33 @@ QTableView::item {
     color: #181824;
 }
 
+/* 类型筛选药丸行 (Mode B 工作台)：仅作首帧初值，apply_theme 会用 build_qss 整体覆盖 */
+#FilterRow {
+    background: transparent;
+}
+
+#FilterPill {
+    background-color: rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.10);
+    border-radius: 9px;
+    color: #2E2E38;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+}
+
+#FilterPill:hover {
+    background-color: rgba(0, 0, 0, 0.10);
+    color: #0A0A0F;
+}
+
+#FilterPill:checked {
+    background-color: #0067C0;
+    border-color: #0067C0;
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
 /* 表头样式 (Mode B 工作台 - 彻底去除底部硬分割线，极简浅灰自然点缀) */
 QHeaderView {
     background-color: transparent;

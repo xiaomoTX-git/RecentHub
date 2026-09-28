@@ -8,15 +8,18 @@ RecentHub 现代化极简偏好设置面板 (Minimalist Settings)
 - 非模态友好设计：打开时完全不阻塞主窗口点击与空白处操作
 """
 
+import os
 from typing import Callable, Optional
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QCheckBox, QWidget, QSlider
+    QCheckBox, QWidget, QSlider, QScrollArea, QLineEdit,
+    QListWidget, QListWidgetItem, QButtonGroup, QFrame
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QTimer
 from PySide6.QtGui import QCursor, QFont, QKeySequence
 
 from app.core.config import ConfigManager
+from app.core.paths import log_dir
 from app.ui.themes import THEMES, get_theme, get_card_bg_with_opacity
 from app.services.autostart_service import AutoStartService
 from app.services.hotkey_service import HotkeyService
@@ -204,7 +207,7 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("RecentHub 设置")
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.resize(500, 480)
+        self.resize(540, 600)
 
         self._drag_pos: Optional[QPoint] = None
         self._init_ui()
@@ -243,6 +246,20 @@ class SettingsDialog(QDialog):
         title_row.addWidget(self.close_btn)
         card_layout.addLayout(title_row)
 
+        # 中部滚动区：设置项较多，小屏 / 高缩放下可滚动查看全部内容
+        scroll = QScrollArea()
+        scroll.setObjectName("SettingsScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        content = QWidget()
+        content.setObjectName("SettingsContent")
+        body = QVBoxLayout(content)
+        body.setContentsMargins(0, 0, 8, 0)
+        body.setSpacing(14)
+        scroll.setWidget(content)
+        card_layout.addWidget(scroll, 1)
+
         # 2. 皮肤管理 (一行极简灵动药丸胶囊)
         theme_section = QVBoxLayout()
         theme_section.setSpacing(8)
@@ -272,7 +289,7 @@ class SettingsDialog(QDialog):
             pills_layout.addWidget(btn)
 
         theme_section.addLayout(pills_layout)
-        card_layout.addLayout(theme_section)
+        body.addLayout(theme_section)
 
         # 3. 背景透明度拖拽调节 (20% ~ 100%)
         opacity_section = QVBoxLayout()
@@ -298,7 +315,7 @@ class SettingsDialog(QDialog):
         self.opacity_slider.valueChanged.connect(self._on_opacity_slider_changed)
         self.opacity_slider.sliderReleased.connect(self._persist_opacity)
         opacity_section.addWidget(self.opacity_slider)
-        card_layout.addLayout(opacity_section)
+        body.addLayout(opacity_section)
 
         # 4. 快捷键设置 (支持全局热键与模式变形按键自定义录制)
         hotkey_section = QVBoxLayout()
@@ -361,7 +378,7 @@ class SettingsDialog(QDialog):
         self.hk_status_tip.setStyleSheet("font-size: 11px; color: #10B981; padding-left: 2px;")
         hotkey_section.addWidget(self.hk_status_tip)
 
-        card_layout.addLayout(hotkey_section)
+        body.addLayout(hotkey_section)
 
         # 5. 系统集成 (开机自启)
         sys_section = QVBoxLayout()
@@ -382,16 +399,104 @@ class SettingsDialog(QDialog):
         self.fullscreen_dnd_cb.setChecked(cfg.get("fullscreen_dnd", True))
         self.fullscreen_dnd_cb.toggled.connect(self._on_fullscreen_dnd_toggled)
         sys_section.addWidget(self.fullscreen_dnd_cb)
-        card_layout.addLayout(sys_section)
+        body.addLayout(sys_section)
 
-        # 6. 极简速查说明 (仅一行轻质中性提示)
+        # 6. 诊断 (运行日志与自助排查入口)
+        diag_section = QVBoxLayout()
+        diag_section.setSpacing(6)
+        diag_title = QLabel("诊断")
+        diag_title.setStyleSheet("font-size: 12px; font-weight: 600; opacity: 0.7;")
+        diag_section.addWidget(diag_title)
+
+        diag_row = QHBoxLayout()
+        self.open_log_btn = QPushButton("打开日志目录")
+        self.open_log_btn.setObjectName("PresetHkBtn")
+        self.open_log_btn.setToolTip("遇到异常时可直接查看 recenthub.log 定位问题")
+        self.open_log_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.open_log_btn.clicked.connect(self._open_log_dir)
+        diag_row.addWidget(self.open_log_btn)
+        diag_row.addStretch()
+        diag_section.addLayout(diag_row)
+
+        self.log_hint_lbl = QLabel("运行日志按 1MB 自动轮转保存在数据目录 logs 下")
+        self.log_hint_lbl.setStyleSheet("font-size: 11px; opacity: 0.60; padding: 2px 0;")
+        diag_section.addWidget(self.log_hint_lbl)
+        body.addLayout(diag_section)
+
+        # 7. 排除规则 (自助管理不再收录的目录 / 文件名 / 扩展名)
+        rules_section = QVBoxLayout()
+        rules_section.setSpacing(8)
+        rules_title = QLabel("排除规则")
+        rules_title.setStyleSheet("font-size: 12px; font-weight: 600; opacity: 0.7;")
+        rules_section.addWidget(rules_title)
+
+        rule_type_row = QHBoxLayout()
+        rule_type_row.setSpacing(6)
+        self.rule_type_group = QButtonGroup(self)
+        self.rule_type_group.setExclusive(True)
+        self.rule_type_btns = {}
+        for rk, rlabel in (
+            ("path_prefix", "目录前缀"),
+            ("name_contains", "文件名包含"),
+            ("extension", "扩展名"),
+        ):
+            rbtn = QPushButton(rlabel)
+            rbtn.setObjectName("FilterPill")
+            rbtn.setCheckable(True)
+            rbtn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            rbtn.setChecked(rk == "path_prefix")
+            self.rule_type_group.addButton(rbtn)
+            self.rule_type_btns[rk] = rbtn
+            rule_type_row.addWidget(rbtn)
+        rule_type_row.addStretch()
+        rules_section.addLayout(rule_type_row)
+
+        rule_input_row = QHBoxLayout()
+        rule_input_row.setSpacing(6)
+        self.rule_input = QLineEdit()
+        self.rule_input.setObjectName("RuleInput")
+        self.rule_input.setPlaceholderText("如 D:\\Temp   或  缓存   或  .tmp")
+        self.rule_input.returnPressed.connect(self._on_add_rule)
+        rule_input_row.addWidget(self.rule_input, 1)
+        self.add_rule_btn = QPushButton("添加")
+        self.add_rule_btn.setObjectName("PresetHkBtn")
+        self.add_rule_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.add_rule_btn.clicked.connect(self._on_add_rule)
+        rule_input_row.addWidget(self.add_rule_btn)
+        rules_section.addLayout(rule_input_row)
+
+        self.rule_list = QListWidget()
+        self.rule_list.setObjectName("RuleList")
+        self.rule_list.setFixedHeight(96)
+        rules_section.addWidget(self.rule_list)
+
+        rule_action_row = QHBoxLayout()
+        rule_action_row.addStretch()
+        self.remove_rule_btn = QPushButton("删除选中")
+        self.remove_rule_btn.setObjectName("ResetHkBtn")
+        self.remove_rule_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.remove_rule_btn.clicked.connect(self._on_remove_rule)
+        rule_action_row.addWidget(self.remove_rule_btn)
+        self.clear_rules_btn = QPushButton("清空")
+        self.clear_rules_btn.setObjectName("ResetHkBtn")
+        self.clear_rules_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.clear_rules_btn.clicked.connect(self._on_clear_rules)
+        rule_action_row.addWidget(self.clear_rules_btn)
+        rules_section.addLayout(rule_action_row)
+
+        self.rule_hint_lbl = QLabel("命中的已收录条目会立即从列表中移除")
+        self.rule_hint_lbl.setStyleSheet("font-size: 11px; opacity: 0.60;")
+        rules_section.addWidget(self.rule_hint_lbl)
+        body.addLayout(rules_section)
+
+        # 8. 极简速查说明 (仅一行轻质中性提示)
         self.shortcut_hint_lbl = QLabel(
             "↓/↑ 键盘选词  ·  Enter 立即打开  ·  Alt+Enter 定位目录  ·  Esc 隐藏"
         )
         self.shortcut_hint_lbl.setStyleSheet("font-size: 11px; opacity: 0.60; padding: 2px 0;")
-        card_layout.addWidget(self.shortcut_hint_lbl)
+        body.addWidget(self.shortcut_hint_lbl)
 
-        # 7. 底部完成按钮
+        # 9. 底部完成按钮
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self.done_btn = QPushButton("完成")
@@ -401,6 +506,9 @@ class SettingsDialog(QDialog):
         self.done_btn.clicked.connect(self.close)
         btn_row.addWidget(self.done_btn)
         card_layout.addLayout(btn_row)
+
+        # 首次呈现时载入既有排除规则
+        self._refresh_rules()
 
     def _on_opacity_slider_changed(self, val: int):
         op_float = val / 100.0
@@ -491,6 +599,81 @@ class SettingsDialog(QDialog):
         cfg = ConfigManager.load()
         cfg["fullscreen_dnd"] = checked
         ConfigManager.save(cfg)
+
+    def _open_log_dir(self):
+        """打开日志目录，便于用户自助排查运行异常"""
+        try:
+            os.startfile(log_dir())
+        except Exception:
+            # 资源管理器不可用等极端情况：静默忽略，绝不因诊断按钮而弹错
+            pass
+
+    # ---- 排除规则管理 ----
+
+    RULE_TYPE_LABELS = {
+        "path_prefix": "目录",
+        "name_contains": "文件名",
+        "extension": "扩展名",
+    }
+
+    def _db(self):
+        """取主窗口持有的数据库实例 (取不到时调用方静默降级)"""
+        return getattr(self.parent_window, "db", None)
+
+    def _current_rule_type(self) -> str:
+        for rk, btn in self.rule_type_btns.items():
+            if btn.isChecked():
+                return rk
+        return "path_prefix"
+
+    def _refresh_rules(self):
+        """把库中既有规则渲染到列表 (id 存在 UserRole 里，供删除时定位)"""
+        db = self._db()
+        if db is None or not hasattr(self, 'rule_list'):
+            return
+        self.rule_list.clear()
+        for rule in db.get_excluded_rules():
+            label = self.RULE_TYPE_LABELS.get(rule.rule_type, rule.rule_type)
+            list_item = QListWidgetItem(f"{label} · {rule.pattern}")
+            list_item.setData(Qt.ItemDataRole.UserRole, rule.id)
+            self.rule_list.addItem(list_item)
+
+    def _on_add_rule(self):
+        db = self._db()
+        pattern = self.rule_input.text().strip()
+        if db is None or not pattern:
+            return
+        db.add_excluded_rule(self._current_rule_type(), pattern)
+        self.rule_input.clear()
+        self._apply_rules_now()
+
+    def _on_remove_rule(self):
+        db = self._db()
+        current = self.rule_list.currentItem()
+        if db is None or current is None:
+            return
+        rule_id = current.data(Qt.ItemDataRole.UserRole)
+        if rule_id is not None:
+            db.remove_excluded_rule(int(rule_id))
+        self._apply_rules_now()
+
+    def _on_clear_rules(self):
+        db = self._db()
+        if db is None:
+            return
+        db.clear_excluded_rules()
+        self._apply_rules_now()
+
+    def _apply_rules_now(self):
+        """规则变更后立即清除已入库的命中条目并刷新主窗口列表 (即时生效)"""
+        db = self._db()
+        if db is None:
+            return
+        db.purge_excluded_items(db.get_excluded_rules())
+        self._refresh_rules()
+        pw = self.parent_window
+        if pw is not None and hasattr(pw, "reload_data"):
+            pw.reload_data()
 
     def _apply_style(self):
         th = get_theme(self.current_theme_id)
@@ -619,6 +802,56 @@ class SettingsDialog(QDialog):
             #CloseBtn:hover {{
                 background: rgba(255, 0, 0, 0.15);
                 color: #FF4D4F;
+            }}
+            #SettingsScroll, #SettingsContent {{
+                background: transparent;
+                border: none;
+            }}
+            #FilterPill {{
+                background-color: {th.btn_bg};
+                border: 1px solid {th.btn_border};
+                border-radius: 9px;
+                color: {th.text_secondary};
+                font-size: 11px;
+                font-weight: 500;
+                padding: 3px 10px;
+            }}
+            #FilterPill:hover {{
+                background-color: {th.btn_hover_bg};
+                color: {th.text_primary};
+            }}
+            #FilterPill:checked {{
+                background-color: {th.accent_color};
+                border-color: {th.accent_color};
+                color: #FFFFFF;
+                font-weight: 600;
+            }}
+            #RuleInput {{
+                background-color: {th.btn_bg};
+                border: 1px solid {th.btn_border};
+                border-radius: 6px;
+                color: {th.text_primary};
+                font-size: 12px;
+                padding: 4px 8px;
+            }}
+            #RuleInput:focus {{
+                border-color: {th.accent_color};
+            }}
+            #RuleList {{
+                background-color: {th.btn_bg};
+                border: 1px solid {th.btn_border};
+                border-radius: 6px;
+                color: {th.text_primary};
+                font-size: 12px;
+                outline: none;
+            }}
+            #RuleList::item {{
+                padding: 4px 6px;
+                border-radius: 4px;
+            }}
+            #RuleList::item:selected {{
+                background-color: {th.accent_color};
+                color: #FFFFFF;
             }}
             #DoneBtn {{
                 background-color: {th.accent_color};

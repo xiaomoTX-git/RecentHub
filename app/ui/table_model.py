@@ -104,6 +104,38 @@ class RecentTableModel(QAbstractTableModel):
             return self._items[row]
         return None
 
+    def _sort_key(self, column: int):
+        """列 → 排序键的显式映射。
+
+        必须按真实字段排序而非显示文案：列 2 显示的是「昨天 / 3 分钟前」这类
+        相对时间字符串，按文案排序会得到完全错乱的顺序，因此取原始的
+        last_used_at 整数做键。
+        """
+        if column == 0:
+            return lambda it: (it.display_name or "").casefold()
+        if column == 1:
+            return lambda it: TYPE_LABELS.get(it.item_type, '文件')
+        if column == 2:
+            return lambda it: it.last_used_at
+        return lambda it: (it.target_path or "").casefold()
+
+    def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
+        """UI 层就地重排，不重新查库。
+
+        不重查是刻意的：query_items 返回的是打分排序结果，重查会丢掉已经
+        流式追加进来的全盘 live 结果。置顶项恒置顶，其余项按列排序。
+        """
+        if not self._items or column < 0 or column >= self.columnCount():
+            return
+        reverse = (order == Qt.SortOrder.DescendingOrder)
+        key = self._sort_key(column)
+
+        self.layoutAboutToBeChanged.emit()
+        # 两段排序：Python 稳定排序保证置顶组内部仍严格遵循所选列的顺序
+        self._items.sort(key=key, reverse=reverse)
+        self._items.sort(key=lambda it: it.pinned, reverse=True)
+        self.layoutChanged.emit()
+
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self._items)
 

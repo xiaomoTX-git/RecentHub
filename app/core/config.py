@@ -32,6 +32,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     # 全屏免打扰保护 (检测到打游戏、看电影等全屏状态时不被快捷键唤出)
     "fullscreen_dnd": True,
 
+    # 日志级别 (DEBUG / INFO / WARNING / ERROR)：仅影响落盘日志详细程度，暂无 UI 入口
+    "log_level": "INFO",
+
     # 现代组件库与设计系统 Tokens (Windows 11 Fluent + Raycast)
     "design_system": "fluent_acrylic",      # fluent_acrylic | raycast_glass | pure_minimal
     "accent_color": "#8B5CF6",              # 与默认深色主题一致的沉浸紫

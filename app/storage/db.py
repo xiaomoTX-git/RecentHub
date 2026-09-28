@@ -3,13 +3,57 @@ RecentHub SQLite + FTS5 高性能本地存储层
 支持 WAL 模式高并发读写、Trigram 倒排全文检索与动态打分排序
 """
 
+import logging
 import os
 import sqlite3
 import threading
 import time
 from typing import List, Optional, Tuple
+from app.core import paths
 from app.core.models import RecentItem, ExcludedRule
 from app.parsers.pinyin_engine import match_score
+
+logger = logging.getLogger(__name__)
+
+# 「类型筛选」的单一真源：类型键 → 扩展名集合。
+# db 侧的 SQL 过滤与 UI 侧的实时结果过滤共用同一份定义，杜绝两处语义漂移。
+# 未出现在此表中的类型键一律按 items.item_type 精确匹配 (如 app / folder)。
+TYPE_EXTENSION_MAP = {
+    'word': ('.doc', '.docx', '.wps', '.dot', '.dotx'),
+    'excel': ('.xls', '.xlsx', '.csv', '.et', '.xlt', '.xltx'),
+    'pdf': ('.pdf',),
+    'code': ('.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json',
+             '.cpp', '.c', '.h', '.java', '.sql', '.sh', '.bat', '.ps1'),
+}
+
+
+def item_matches_filters(
+    item: RecentItem,
+    item_type: Optional[str] = None,
+    exts: Optional[List[str]] = None,
+    mtime_after: Optional[int] = None,
+) -> bool:
+    """判断单条数据是否命中全部筛选条件 (类型 / 扩展名 / 时间下界)。
+
+    语义与 StorageDB._build_type_filter 及 query_items 的附加过滤完全对齐，
+    供 UI 侧过滤流式追加的全盘检索结果使用 (那些结果不经过 SQL 过滤)。
+    """
+    if item_type and item_type != 'all':
+        mapped = TYPE_EXTENSION_MAP.get(item_type)
+        if mapped:
+            if (item.extension or '').lower() not in mapped:
+                return False
+        elif item_type == 'doc':
+            if item.item_type != 'file':
+                return False
+        elif item.item_type != item_type:
+            return False
+    if exts:
+        if (item.extension or '').lower() not in set(exts):
+            return False
+    if mtime_after and (item.last_used_at or 0) < mtime_after:
+        return False
+    return True
 
 
 class StorageDB:
@@ -20,8 +64,7 @@ class StorageDB:
         self._mem_conn = None
         self._all_conns: List[sqlite3.Connection] = []
         if not db_path:
-            base_dir = os.path.expandvars(r"%LOCALAPPDATA%\RecentHub")
-            os.makedirs(base_dir, exist_ok=True)
+            base_dir = paths.db_dir()
             self.db_path = os.path.join(base_dir, "recenthub.db")
         else:
             self.db_path = db_path
@@ -71,7 +114,7 @@ class StorageDB:
             with self.get_connection() as conn:
                 conn.execute("PRAGMA shrink_memory;")
         except Exception:
-            pass
+            logger.debug("shrink_memory 执行失败 (不影响主流程)", exc_info=True)
 
 
     def _init_db(self):
@@ -99,7 +142,8 @@ class StorageDB:
             try:
                 conn.execute("ALTER TABLE items ADD COLUMN pinyin_full TEXT DEFAULT '';")
             except Exception:
-                pass
+                # 列已存在属预期内的正常路径，仅 DEBUG 记录
+                logger.debug("items.pinyin_full 列已存在，跳过迁移", exc_info=True)
 
             # 2. 索引
             conn.execute("CREATE INDEX IF NOT EXISTS idx_items_last_used ON items(last_used_at DESC);")
@@ -212,28 +256,35 @@ class StorageDB:
     def _build_type_filter(self, item_type: Optional[str]):
         if not item_type or item_type == 'all':
             return "", []
-        if item_type == 'word':
-            exts = ('.doc', '.docx', '.wps', '.dot', '.dotx')
+        exts = TYPE_EXTENSION_MAP.get(item_type)
+        if exts:
             return f" AND LOWER(i.extension) IN ({','.join(['?']*len(exts))})", list(exts)
-        elif item_type == 'excel':
-            exts = ('.xls', '.xlsx', '.csv', '.et', '.xlt', '.xltx')
-            return f" AND LOWER(i.extension) IN ({','.join(['?']*len(exts))})", list(exts)
-        elif item_type == 'pdf':
-            return " AND LOWER(i.extension) = ?", ['.pdf']
-        elif item_type == 'code':
-            exts = ('.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json', '.cpp', '.c', '.h', '.java', '.sql', '.sh', '.bat', '.ps1')
-            return f" AND LOWER(i.extension) IN ({','.join(['?']*len(exts))})", list(exts)
-        elif item_type == 'doc':
+        if item_type == 'doc':
             return " AND i.item_type = ?", ['file']
-        else:
-            return " AND i.item_type = ?", [item_type]
+        return " AND i.item_type = ?", [item_type]
+
+    @staticmethod
+    def _build_extra_filter(exts: Optional[List[str]], mtime_after: Optional[int]):
+        """构建搜索语法附加过滤 (ext:xxx / >7d 时间下界)，语义与 item_matches_filters 对齐。"""
+        clause = ""
+        params: List = []
+        if exts:
+            norm = [e.lower() if e.startswith('.') else '.' + e.lower() for e in exts]
+            clause += f" AND LOWER(i.extension) IN ({','.join(['?'] * len(norm))})"
+            params.extend(norm)
+        if mtime_after:
+            clause += " AND i.last_used_at >= ?"
+            params.append(int(mtime_after))
+        return clause, params
 
     def query_items(
         self,
         query: str = "",
         item_type: Optional[str] = None,
         limit: int = 200,
-        offset: int = 0
+        offset: int = 0,
+        exts: Optional[List[str]] = None,
+        mtime_after: Optional[int] = None
     ) -> List[RecentItem]:
         """
         混合高阶查询：
@@ -241,10 +292,14 @@ class StorageDB:
         2. 关键字查询:
            - 若有关键字，结合 FTS5 与 LIKE 召回候选
            - 使用 match_score + 时间衰减进行二次精准打分重排
+        exts / mtime_after 为搜索语法附加过滤，与类型过滤合并后作用于全部召回分支。
         """
         q = query.strip()
         now = time.time()
         type_clause, type_params = self._build_type_filter(item_type)
+        extra_clause, extra_params = self._build_extra_filter(exts, mtime_after)
+        type_clause += extra_clause
+        type_params = list(type_params) + extra_params
         
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -292,7 +347,8 @@ class StorageDB:
                     for r in cursor.execute(fts_sql, fts_params).fetchall():
                         candidate_map[r['id']] = r
                 except Exception:
-                    pass
+                    # FTS5 语法异常时静默降级到 LIKE 全表召回，属可接受的降级路径
+                    logger.debug("FTS5 召回失败，降级到 LIKE 兜底", exc_info=True)
 
             # LIKE 快速兜底召回 (支持多关键词、连拼与品牌拼音智能衍生)
             q_clean = q.lower().replace(" ", "").replace("-", "").replace("_", "")
@@ -399,3 +455,49 @@ class StorageDB:
         with self.get_connection() as conn:
             rows = conn.execute("SELECT * FROM excluded_rules").fetchall()
             return [ExcludedRule(id=r['id'], rule_type=r['rule_type'], pattern=r['pattern']) for r in rows]
+
+    def remove_excluded_rule(self, rule_id: int) -> bool:
+        with self.get_connection() as conn:
+            cursor = conn.execute("DELETE FROM excluded_rules WHERE id = ?", (rule_id,))
+            return cursor.rowcount > 0
+
+    def clear_excluded_rules(self):
+        with self.get_connection() as conn:
+            conn.execute("DELETE FROM excluded_rules;")
+
+    @staticmethod
+    def _like_escape(pattern: str) -> str:
+        """转义 LIKE 通配符，确保匹配为字面量，与 merger.is_excluded 语义一致"""
+        return pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    def purge_excluded_items(self, rules: List[ExcludedRule]) -> int:
+        """按现有排除规则删除已入库的匹配条目，使规则即时生效而非仅影响下次扫描。
+
+        匹配语义与 app/aggregator/merger.py 的 is_excluded() 严格对齐：
+        path_prefix → 路径前缀；name_contains → 文件名包含；extension → 扩展名相等。
+        """
+        conditions: List[str] = []
+        params: List[str] = []
+        for rule in rules:
+            p = (rule.pattern or "").lower().strip()
+            if not p:
+                continue
+            if rule.rule_type == 'path_prefix':
+                conditions.append("LOWER(target_path) LIKE ? ESCAPE '\\'")
+                params.append(self._like_escape(p) + "%")
+            elif rule.rule_type == 'extension':
+                conditions.append("LOWER(extension) = ?")
+                params.append(p)
+            elif rule.rule_type == 'name_contains':
+                conditions.append("LOWER(display_name) LIKE ? ESCAPE '\\'")
+                params.append("%" + self._like_escape(p) + "%")
+
+        if not conditions:
+            return 0
+
+        where = " OR ".join(conditions)
+        with self.get_connection() as conn:
+            # item_sources 未开启外键级联，需显式清理，避免留下孤儿来源行
+            conn.execute(f"DELETE FROM item_sources WHERE item_id IN (SELECT id FROM items WHERE {where})", params)
+            cursor = conn.execute(f"DELETE FROM items WHERE {where}", params)
+            return cursor.rowcount

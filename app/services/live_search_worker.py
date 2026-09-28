@@ -5,11 +5,14 @@ RecentHub 单例常驻后台搜索线程模块
 - 基于 Token 版本号的任务队列：自动作废过时搜索，仅计算最新输入
 """
 
+import logging
 import queue
 from typing import List
 from PySide6.QtCore import QThread, Signal
 from app.core.models import RecentItem
 from app.services.file_search_service import FileSearchService
+
+logger = logging.getLogger(__name__)
 
 
 class PersistentSearchWorker(QThread):
@@ -73,7 +76,7 @@ class PersistentSearchWorker(QThread):
             import pythoncom
             pythoncom.CoInitialize()
         except Exception:
-            pass
+            logger.debug("后台检索线程 CoInitialize 失败", exc_info=True)
 
         try:
             while self._is_running:
@@ -84,6 +87,7 @@ class PersistentSearchWorker(QThread):
                 except queue.Empty:
                     continue
                 except Exception:
+                    logger.debug("后台检索任务出队异常，退出线程循环", exc_info=True)
                     break
 
                 if not self._is_running or token == -1:
@@ -99,7 +103,7 @@ class PersistentSearchWorker(QThread):
                     if self._is_running and token == self._current_token:
                         self.results_ready.emit(query, items)
                 except Exception:
-                    pass
+                    logger.warning("全盘实时检索执行失败: %s", query, exc_info=True)
         finally:
             try:
                 import pythoncom

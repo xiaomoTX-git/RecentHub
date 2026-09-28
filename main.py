@@ -30,6 +30,7 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtCore import Qt
 
 from app.core.paths import resource_dir
+from app.core.logging_setup import setup_logging
 from app.storage.db import StorageDB
 from app.services.scan_service import ScanService
 from app.services.hotkey_service import HotkeyService
@@ -42,6 +43,10 @@ SERVER_NAME = "RecentHub_SingleInstance_IPC"
 
 
 def main():
+    # 尽早安装日志与全局异常钩子：此后所有警告/异常 (含后台线程) 都会落盘，
+    # 无控制台的 GUI 进程里这是唯一的排查依据
+    setup_logging()
+
     # 开机自启时注册表命令会带上 --silent：仅静默驻留托盘 (全局热键/托盘随时唤出)，
     # 不主动弹出主窗口、不抢占桌面焦点
     silent_start = "--silent" in sys.argv[1:]

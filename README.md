@@ -8,13 +8,18 @@
 
 ## ⬇️ 下载
 
-| 版本 | 说明 | 下载 |
-| :--- | :--- | :--- |
-| **v1.0.0** | Windows 10/11 64 位安装包 (~28 MB)，免管理员权限 | **[RecentHub_Setup_v1.0.0.exe](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
+| 版本 | 形态 | 说明 | 下载 |
+| :--- | :--- | :--- | :--- |
+| **v1.1.0** | 安装包 | Windows 10/11 64 位，免管理员权限 | **[RecentHub_Setup_v1.1.0.exe](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
+| **v1.1.0** | 便携版 | 免安装 zip，解压即用，数据随目录走 | **[RecentHub_portable_v1.1.0.zip](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
 
 全部版本见 [Releases](https://github.com/xiaomoTX-git/RecentHub/releases)，逐版本改动见 [CHANGELOG](CHANGELOG.md)。安装包为**当前用户级安装**，全程无 UAC 弹窗；桌面快捷方式与开机自启默认勾选（自启为静默驻留托盘，不弹窗打扰）。
 
 > 卸载时用户数据（`%APPDATA%\RecentHub` 的配置与数据库）默认保留，便于重装后无缝续用。
+
+**便携版用法**：解压到任意目录（含 U 盘），双击其中的 `RecentHub.exe` 即可。目录内的 `portable.flag` 标记文件让配置 / 数据库 / 日志全部就地写入 `data\` 子目录——删除整个目录即为彻底卸载，不留任何注册表与系统痕迹。
+
+> 已知边界：便携版与已安装版同时运行会因单实例互斥而相互接管，建议只保留其中一种形态。
 
 ---
 
@@ -45,7 +50,7 @@ RecentHub 只读这些既有痕迹，**零全盘遍历、零文件系统监控�
 
 ### 4. 双模态融合界面
 - **Mode A · 极简胶囊**：居中无边框悬浮条，失焦或 `Esc` 即刻隐藏，`Enter` 秒开，方向键无缝穿透导航；
-- **Mode B · 详细工作台**：`Tab` 一键展开为多列表格，按最后使用时间 / 打开频次 / 文件类型排序与分面过滤；
+- **Mode B · 详细工作台**：`Tab` 一键展开为多列表格，点击「名称 / 类型 / 最后使用 / 完整路径」表头即可排序，顶部「全部 / 文档 / 表格 / PDF / 代码 / 应用 / 文件夹」药丸一键过滤；
 - **高对比纯色主题**：深色为纯黑底白字、浅色为纯白底黑字，底色完全不透明，不受壁纸与身后窗口影响；长路径单行省略号截断，绝不折行破版。
 
 ### 5. 惰性接力式深度检索
@@ -67,6 +72,32 @@ RecentHub 只读这些既有痕迹，**零全盘遍历、零文件系统监控�
 | 中文词汇全文匹配（`需求分析`） | < 15ms | **5.87ms** | 瞬时响应 |
 | 置顶空查询排序 | < 10ms | **2.22ms** | 瞬时响应 |
 | 真实系统全源扫描 | < 200ms | **28.33ms**（75 条真实轨迹） | 极佳 |
+
+---
+
+## 搜索语法
+
+除自然语言关键词外，搜索框支持叠加精确过滤（可自由组合，纯语法串亦可单独使用）：
+
+| 语法 | 含义 | 示例 |
+| :--- | :--- | :--- |
+| `ext:xxx` | 限定扩展名，逗号分隔多个 | `报告 ext:pdf`、`ext:png,jpg` |
+| `type:xxx` | 限定类型：`word` / `excel` / `pdf` / `code` / `doc` / `app` / `folder` / `url` | `type:excel 预算` |
+| `>Nd` / `>Nh` / `>Nm` / `>Nw` | 限定「最近使用时间」在 N 天/小时/分钟/周以内 | `>7d 项目`、`>30m` |
+
+> 例：`ext:xlsx >30d` 返回一个月内用过的 Excel 表格；仅输入 `ext:pdf` 则直接列出最近的 PDF。
+
+---
+
+## 数据与日志位置
+
+| 形态 | 配置 | 数据库 | 日志 |
+| :--- | :--- | :--- | :--- |
+| 安装版 | `%APPDATA%\RecentHub` | `%LOCALAPPDATA%\RecentHub` | `%APPDATA%\RecentHub\logs` |
+| 便携版 | `exe\data` | `exe\data` | `exe\data\logs` |
+| 源码运行 | `data\` | `%LOCALAPPDATA%\RecentHub` | `data\logs` |
+
+日志为滚动文件（`recenthub.log`，单文件 1MB × 4 份），在「设置 → 诊断 → 打开日志目录」可一键直达，便于自助排障。
 
 ---
 
@@ -94,9 +125,12 @@ run.bat
 
 # 3. 生成安装包（需 Inno Setup 6）
 "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\RecentHub.iss
+
+# 4. 生成便携绿色版 zip（自动写入 portable.flag 并压缩）
+build_portable.bat
 ```
 
-运行时路径策略：资源只读（源码 `app\resources` / 打包 `_MEIPASS\resources`），用户数据可写（源码 `data\` / 安装版 `%APPDATA%\RecentHub`）。
+运行时路径策略：资源只读（源码 `app\resources` / 打包 `_MEIPASS\resources`），用户数据可写（源码 `data\` / 安装版 `%APPDATA%\RecentHub` / 便携版 `exe\data`）；数据库统一落 `%LOCALAPPDATA%\RecentHub`，便携版例外。
 
 依赖：`PySide6`、`pywin32`、`pypinyin`（见 [requirements.txt](requirements.txt)）。
 

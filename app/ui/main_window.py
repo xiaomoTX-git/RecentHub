@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
     QTableView, QPushButton, QLabel, QMenu, QHeaderView,
     QAbstractItemView, QApplication, QFrame, QSizePolicy,
-    QProxyStyle, QStyle
+    QProxyStyle, QStyle, QButtonGroup
 )
 from PySide6.QtGui import (
     QKeySequence, QShortcut, QAction, QClipboard, QCursor,
@@ -36,7 +36,8 @@ _GAKS = None
 
 from app.core.config import ConfigManager
 from app.core.paths import resource_dir
-from app.storage.db import StorageDB
+from app.storage.db import StorageDB, item_matches_filters
+from app.parsers.query_parser import parse_query
 from app.services.scan_service import ScanService
 from app.services.open_service import OpenService
 from app.core.models import RecentItem
@@ -162,6 +163,11 @@ class MainWindow(QMainWindow):
         self._panel_forced_open = False
         # 当前高亮行；-1 表示尚未建立选中态 (首按键应落在首行/末行)
         self._current_selected_row = -1
+        # 表头排序状态：-1 表示未启用排序 (保持 DB 默认的置顶 + 时间倒序)
+        self._sort_column = -1
+        self._sort_order = Qt.SortOrder.AscendingOrder
+        # 类型筛选 (Mode B 顶部药丸)：'all' 表示不过滤
+        self._current_item_type = "all"
         # 空列表时的上下键加载去重标记，避免巡航期间 50Hz 重复查库
         self._nav_ensure_key = None
         # 长按巡航状态机：是否已收到过 OS 自动重复 / 巡航起点 / 系统首重复延迟
@@ -315,6 +321,9 @@ class MainWindow(QMainWindow):
         self.table_view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerItem)
         self.table_view.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table_view.horizontalHeader().setHighlightSections(False)
+        # 表头可点击排序 (Mode B)：仅开启点击与指示箭头，绝不启用 setSortingEnabled
+        self.table_view.horizontalHeader().setSectionsClickable(True)
+        self.table_view.horizontalHeader().setSortIndicatorShown(True)
         if self.table_view.viewport():
             self.table_view.viewport().setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         
@@ -338,6 +347,38 @@ class MainWindow(QMainWindow):
         # 空闲时整行不占任何高度：极简条仍保持 48px，不会被撑高
         self.loading_row.hide()
         self.card_layout.addWidget(self.loading_row)
+
+        # 类型筛选药丸行：仅 Mode B 工作台显示，Mode A 极简条隐藏 (见 _apply_mode_ui)
+        self.filter_row = QWidget()
+        self.filter_row.setObjectName("FilterRow")
+        filter_layout = QHBoxLayout(self.filter_row)
+        filter_layout.setContentsMargins(2, 0, 2, 2)
+        filter_layout.setSpacing(6)
+
+        self.filter_btn_group = QButtonGroup(self.filter_row)
+        self.filter_btn_group.setExclusive(True)
+        self.filter_buttons = {}
+        for type_key, label in (
+            ("all", "全部"),
+            ("word", "文档"),
+            ("excel", "表格"),
+            ("pdf", "PDF"),
+            ("code", "代码"),
+            ("app", "应用"),
+            ("folder", "文件夹"),
+        ):
+            btn = QPushButton(label)
+            btn.setObjectName("FilterPill")
+            btn.setCheckable(True)
+            btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            btn.setChecked(type_key == "all")
+            btn.clicked.connect(lambda checked, k=type_key: self._select_item_type(k))
+            self.filter_btn_group.addButton(btn)
+            self.filter_buttons[type_key] = btn
+            filter_layout.addWidget(btn)
+        filter_layout.addStretch()
+        self.filter_row.hide()
+        self.card_layout.addWidget(self.filter_row)
 
         self.card_layout.addWidget(self.table_view)
 
@@ -696,6 +737,9 @@ class MainWindow(QMainWindow):
         if self.current_mode == "A":
             if hasattr(self, 'settings_btn'):
                 self.settings_btn.hide()
+            # 类型药丸仅属于工作台，极简条下隐藏
+            if hasattr(self, 'filter_row'):
+                self.filter_row.hide()
             self.table_model.set_compact_mode(True)
             self.table_view.horizontalHeader().setVisible(False)
             self.mode_toggle_btn.setIcon(self.wb_icon)
@@ -726,6 +770,8 @@ class MainWindow(QMainWindow):
         else:
             if hasattr(self, 'settings_btn'):
                 self.settings_btn.show()
+            if hasattr(self, 'filter_row'):
+                self.filter_row.show()
             self.table_view.show()
             self.table_model.set_compact_mode(False)
             self.table_view.horizontalHeader().setVisible(True)
@@ -1094,6 +1140,8 @@ class MainWindow(QMainWindow):
         self.table_view.clicked.connect(self._on_table_row_clicked)
         self.table_view.doubleClicked.connect(self._on_table_double_clicked)
         self.table_view.customContextMenuRequested.connect(self._show_context_menu)
+        # 表头点击排序 (不用 setSortingEnabled：避免 Qt 在 reset 后自动重排并二次触发)
+        self.table_view.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
 
     def _on_text_changed(self, text: str):
         if not text.strip():
@@ -1133,29 +1181,44 @@ class MainWindow(QMainWindow):
             self._loading_timeout.stop()
 
     def _on_async_search_timeout(self):
-        q = self.search_edit.text().strip()
+        spec = parse_query(self.search_edit.text())
+        q = spec.text
         if q and len(q) >= 2 and hasattr(self, 'live_search_worker') and self.live_search_worker:
             self.live_search_worker.submit_search(q)
             self._start_search_loading()
 
+    def _select_item_type(self, type_key: str):
+        """类型药丸切换：按新类型重新检索并刷新本地视图 (异步 live 结果由谓词过滤)"""
+        self._current_item_type = type_key
+        self._nav_ensure_key = None
+        self.reload_local_data()
+        self.search_edit.setFocus()
+
     def reload_local_data(self):
         """Tier 1 本地瞬间秒出：毫秒级完成本地已索引历史命中并即时刷新视图 (0ms延迟)"""
-        q = self.search_edit.text().strip()
+        raw = self.search_edit.text()
+        spec = parse_query(raw)
+        q = spec.text
         # 数据可能已变化，放行上下键重新尝试加载空列表场景
         self._nav_ensure_key = None
 
-        if self.current_mode == "A" and not q:
+        # 仅当完全未输入时才保持 Mode A 空列表；ext:xxx 等纯语法串仍应正常检索
+        if self.current_mode == "A" and not raw.strip():
             self.table_model.set_items([])
             self._current_seen_paths.clear()
             return
 
         items = self.db.query_items(
             query=q,
-            item_type=None,
-            limit=150
+            item_type=spec.type_key or self._current_item_type,
+            limit=150,
+            exts=spec.exts,
+            mtime_after=spec.mtime_after
         )
         self._current_seen_paths = {it.target_path.lower() for it in items}
         self.table_model.set_items(items)
+        # 数据被整体替换，排序若处于启用状态需重新套用，否则表头箭头与真实顺序不一致
+        self._reapply_active_sort(preserve_selection=False)
         if items:
             self._navigate_to_row(0, -1)
         else:
@@ -1169,21 +1232,26 @@ class MainWindow(QMainWindow):
     def reload_data(self):
         """兼容接口：执行 Tier 1 本地检索并立即触发 Tier 2 异步检索"""
         self.reload_local_data()
-        q = self.search_edit.text().strip()
+        spec = parse_query(self.search_edit.text())
+        q = spec.text
         # Tier 2 异步流式全盘检索 (交由单例常驻 Worker 安全排队，彻底消除多线程撕裂与闪退)
         if q and len(q) >= 2 and hasattr(self, 'live_search_worker') and self.live_search_worker:
             self.live_search_worker.submit_search(q)
             self._start_search_loading()
 
     def _on_async_results_ready(self, query: str, live_items: List[RecentItem]):
-        current_q = self.search_edit.text().strip()
-        if query != current_q:
+        spec = parse_query(self.search_edit.text())
+        if query != spec.text:
             # 结果属于已过时的旧查询：新查询仍在途中，指示器必须继续旋转
             return
         self._stop_search_loading()
 
+        item_type = spec.type_key or self._current_item_type
         to_append = []
         for lf in live_items:
+            # 全盘 live 结果未经 SQL 过滤，这里按当前药丸/搜索语法做一次等价过滤
+            if not item_matches_filters(lf, item_type, spec.exts, spec.mtime_after):
+                continue
             path_lower = lf.target_path.lower()
             if path_lower not in self._current_seen_paths:
                 self._current_seen_paths.add(path_lower)
@@ -1191,9 +1259,56 @@ class MainWindow(QMainWindow):
 
         if to_append:
             self.table_model.append_items(to_append)
+            # 流式追加会让新条目落到末尾，启用排序时必须重排以维持顺序
+            self._reapply_active_sort()
             total = self.table_model.rowCount()
             if self.current_mode == "A":
                 self.resize(self.custom_width, self.custom_dropdown_height)
+
+    def _on_header_clicked(self, column: int):
+        """Mode B 表头点击排序：同列再点翻转升降序，换列则从升序开始。
+
+        刻意不使用 setSortingEnabled(True)：Qt 会在模型 reset 后按旧指示器
+        自动重排并再次触发排序，与数据源反复打架。这里只响应点击。
+        """
+        if column == self._sort_column:
+            self._sort_order = (
+                Qt.SortOrder.DescendingOrder
+                if self._sort_order == Qt.SortOrder.AscendingOrder
+                else Qt.SortOrder.AscendingOrder
+            )
+        else:
+            self._sort_column = column
+            self._sort_order = Qt.SortOrder.AscendingOrder
+
+        self.table_view.horizontalHeader().setSortIndicator(self._sort_column, self._sort_order)
+        self._reapply_active_sort()
+        # 排序后把焦点还给搜索框，避免抢走焦点破坏上下键导航与直接输入
+        self.search_edit.setFocus()
+
+    def _reapply_active_sort(self, preserve_selection: bool = True):
+        """按当前排序状态就地重排 (未启用排序时为空操作)。
+
+        preserve_selection=True 时按 target_path 记忆并回填选中行，
+        因为重排会让行号整体漂移，不回填的话高亮会落到其它条目上。
+        """
+        if self._sort_column < 0:
+            return
+
+        cur_item = None
+        if preserve_selection:
+            cur_row = getattr(self, '_current_selected_row', -1)
+            if 0 <= cur_row:
+                cur_item = self.table_model.get_item(cur_row)
+
+        self.table_model.sort(self._sort_column, self._sort_order)
+
+        if cur_item:
+            for r in range(self.table_model.rowCount()):
+                it = self.table_model.get_item(r)
+                if it and it.target_path == cur_item.target_path:
+                    self._navigate_to_row(r, -1)
+                    break
 
     def trigger_background_scan(self):
         # 严禁在旧扫描线程仍在运行时覆盖引用：被覆盖的 QThread 会在存活状态下析构，
@@ -1233,12 +1348,13 @@ class MainWindow(QMainWindow):
         if self._nav_ensure_key == query_key:
             return False
         self._nav_ensure_key = query_key
-        items = self.db.query_items(query="", item_type=None, limit=150)
+        items = self.db.query_items(query="", item_type=self._current_item_type, limit=150)
         if not items:
             return False
         self._panel_forced_open = True
         self._current_seen_paths = {it.target_path.lower() for it in items}
         self.table_model.set_items(items)
+        self._reapply_active_sort(preserve_selection=False)
         self._current_selected_row = -1
         self._apply_mode_ui(recenter=False)
         return True

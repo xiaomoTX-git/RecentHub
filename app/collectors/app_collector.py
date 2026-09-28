@@ -4,6 +4,7 @@ RecentHub 已安装应用收集器 (AppCollector)
 支持快捷方式智能工作目录回退与 .lnk 原生调用兜底
 """
 
+import logging
 import os
 import winreg
 from typing import List, Set
@@ -11,6 +12,8 @@ from app.collectors.base import BaseCollector
 from app.core.models import RecentItem
 from app.parsers.lnk_parser import LnkParser
 from app.aggregator.normalizer import normalize_item
+
+logger = logging.getLogger(__name__)
 
 
 class AppCollector(BaseCollector):
@@ -97,8 +100,9 @@ class AppCollector(BaseCollector):
                                             c_item.item_type = "app"
                                             items.append(c_item)
                             except Exception:
-                                pass
+                                logger.debug("伴随主程序扫描失败: %s", app_dir, exc_info=True)
                     except Exception:
+                        logger.debug("快捷方式解析失败，跳过: %s", full_lnk, exc_info=True)
                         continue
 
         # 2. 扫描注册表 App Paths
@@ -138,9 +142,10 @@ class AppCollector(BaseCollector):
                                 item.item_type = "app"
                                 items.append(item)
                         except Exception:
+                            logger.debug("App Paths 子键读取失败: %s", app_name, exc_info=True)
                             continue
             except Exception:
-                pass
+                logger.debug("App Paths 注册表根打开失败: %s", reg_path, exc_info=True)
 
         # 3. 扫描系统已安装软件注册表 (Uninstall 表覆盖用户自定义在各盘根目录的软件，如 E:\LeiGod_Acc)
         reg_uninstalls = [
@@ -206,8 +211,9 @@ class AppCollector(BaseCollector):
                                                 item.item_type = "app"
                                                 items.append(item)
                         except Exception:
+                            logger.debug("Uninstall 子键读取失败: %s", sub_name, exc_info=True)
                             continue
             except Exception:
-                pass
+                logger.debug("Uninstall 注册表根打开失败: %s", reg_path, exc_info=True)
 
         return items

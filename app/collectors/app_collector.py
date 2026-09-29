@@ -16,6 +16,35 @@ from app.aggregator.normalizer import normalize_item
 logger = logging.getLogger(__name__)
 
 
+def _parse_internet_shortcut(fp: str) -> tuple:
+    """解析 .url Internet 快捷方式，返回 (URL, IconFile)。
+
+    .url 本质是 ini 文本，但编码不统一 (Steam 写 ANSI/UTF-8，个别工具写 UTF-16)，
+    逐个编码试探 + 手工逐行提取，比 configparser 更抗脏数据。
+    """
+    try:
+        raw = open(fp, "rb").read()
+    except OSError:
+        return "", ""
+    text = ""
+    for enc in ("utf-8", "gbk", "utf-16"):
+        try:
+            text = raw.decode(enc)
+            break
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    if not text:
+        return "", ""
+    url, icon = "", ""
+    for line in text.splitlines():
+        low = line.strip().lower()
+        if low.startswith("url="):
+            url = line.strip()[4:].strip()
+        elif low.startswith("iconfile="):
+            icon = line.strip()[9:].strip()
+    return url, icon
+
+
 class AppCollector(BaseCollector):
     def __init__(self):
         super().__init__("apps")
@@ -26,6 +55,7 @@ class AppCollector(BaseCollector):
     def collect(self) -> List[RecentItem]:
         items: List[RecentItem] = []
         seen_targets: Set[str] = set()
+        seen_urls: Set[str] = set()
 
         # 1. 扫描开始菜单与桌面快捷方式
         scan_dirs = [
@@ -40,11 +70,40 @@ class AppCollector(BaseCollector):
                 continue
             for root, _, files in os.walk(d):
                 for f in files:
-                    if not f.lower().endswith(".lnk"):
+                    name_low = f.lower()
+                    if not (name_low.endswith(".lnk") or name_low.endswith(".url")):
                         continue
-                    if "卸载" in f or "uninstall" in f.lower():
+                    if "卸载" in f or "uninstall" in name_low:
                         continue
-                        
+
+                    # Steam 等平台只给游戏生成 .url 协议快捷方式 (steam:// 等)，没有 .lnk：
+                    # 按「应用」收录，桌面/开始菜单的同 URL 副本按 URL 去重
+                    if name_low.endswith(".url"):
+                        full_url = os.path.join(root, f)
+                        try:
+                            url, _icon = _parse_internet_shortcut(full_url)
+                            if not url:
+                                continue
+                            scheme = url.split(":", 1)[0].lower()
+                            if scheme in ("http", "https", "ftp", "file"):
+                                continue  # 纯网页收藏不是应用
+                            if url.lower() in seen_urls:
+                                continue
+                            seen_urls.add(url.lower())
+                            seen_targets.add(os.path.normpath(full_url).lower())
+                            item = normalize_item(
+                                target_path=os.path.normpath(full_url),
+                                display_name=f[:-4],
+                                last_used_at=int(os.path.getmtime(full_url)),
+                                use_count=1,
+                                source=self.name
+                            )
+                            item.item_type = "app"
+                            items.append(item)
+                        except Exception:
+                            logger.debug("URL 快捷方式解析失败，跳过: %s", full_url, exc_info=True)
+                        continue
+
                     full_lnk = os.path.join(root, f)
                     try:
                         info = LnkParser.parse_file(full_lnk)

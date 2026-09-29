@@ -300,14 +300,15 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     padding: 2px 4px;
 }}
 
-#LoadingRow {{
+#LoadingOverlay {{
     background: transparent;
 }}
 
 #LoadingLabel {{
     background: transparent;
     color: {theme.accent_color};
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
+    letter-spacing: 1px;
 }}
 """

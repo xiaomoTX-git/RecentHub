@@ -64,8 +64,8 @@ class CleanItemViewStyle(QProxyStyle):
 class SearchLoadingIndicator(QWidget):
     """深度全盘检索进行中的极简旋转指示器 (圆头弧线匀速自转，配色随主题)
 
-    挂在搜索行下方的居中 loading 行里，与"正在全盘检索…"文案一起出现，
-    结果到达或兜底超时后整行隐去，不占用常规布局高度。
+    挂在结果区域正中的大号 loading 浮层里，与"正在全盘检索…"文案一起出现，
+    结果到达或兜底超时后整层隐去，不占用常规布局高度。
     """
 
     def __init__(self, parent=None, size: int = 18):
@@ -334,22 +334,29 @@ class MainWindow(QMainWindow):
         self.table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.table_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
-        # 检索 loading 行：位于搜索行正下方、水平居中 (比原来挤在输入框右侧更醒目)
-        self.loading_row = QWidget()
-        self.loading_row.setObjectName("LoadingRow")
-        loading_layout = QHBoxLayout(self.loading_row)
-        loading_layout.setContentsMargins(0, 2, 0, 2)
-        loading_layout.setSpacing(8)
-        loading_layout.addStretch()
-        self.search_loading = SearchLoadingIndicator(size=18)
-        loading_layout.addWidget(self.search_loading)
+        # 检索 loading 浮层：居中悬浮在结果区域正中，大号转圈 + 大字 (大方不局促)；
+        # 仅当列表尚无任何结果时显示，已有结果流式追加时绝不遮挡内容。
+        # 挂在 table_view 上并在 resizeEvent 里跟随其几何，模式切换/高度动画都会自动重新居中
+        self.loading_overlay = QWidget(self.table_view)
+        self.loading_overlay.setObjectName("LoadingOverlay")
+        self.loading_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        ov_layout = QVBoxLayout(self.loading_overlay)
+        ov_layout.setContentsMargins(0, 0, 0, 0)
+        ov_layout.setSpacing(16)
+        ov_layout.addStretch()
+        spinner_row = QHBoxLayout()
+        spinner_row.addStretch()
+        self.search_loading = SearchLoadingIndicator(size=44)
+        spinner_row.addWidget(self.search_loading)
+        spinner_row.addStretch()
+        ov_layout.addLayout(spinner_row)
         self.loading_label = QLabel("正在全盘检索…")
         self.loading_label.setObjectName("LoadingLabel")
-        loading_layout.addWidget(self.loading_label)
-        loading_layout.addStretch()
-        # 空闲时整行不占任何高度：极简条仍保持 48px，不会被撑高
-        self.loading_row.hide()
-        self.card_layout.addWidget(self.loading_row)
+        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ov_layout.addWidget(self.loading_label)
+        ov_layout.addStretch()
+        self.loading_overlay.setGeometry(self.table_view.rect())
+        self.loading_overlay.hide()
 
         # 类型筛选药丸行：仅 Mode B 工作台显示，Mode A 极简条隐藏 (见 _apply_mode_ui)
         self.filter_row = QWidget()
@@ -872,6 +879,12 @@ class MainWindow(QMainWindow):
         self._prepare_background_hibernation()
         super().hide()
 
+    def resizeEvent(self, event):
+        # loading 浮层跟随结果区几何：窗口高度动画 / 模式切换 / 拖拽缩放都会走到这里
+        if hasattr(self, 'loading_overlay'):
+            self.loading_overlay.setGeometry(self.table_view.rect())
+        super().resizeEvent(event)
+
     def _prepare_background_hibernation(self):
         # 1. 彻底停止后台前端定时器，实现 0% CPU 占用
         if hasattr(self, 'system_theme_timer') and self.system_theme_timer.isActive():
@@ -1205,20 +1218,22 @@ class MainWindow(QMainWindow):
             self._stop_search_loading()
 
     def _start_search_loading(self):
-        """进入深度检索态：点亮搜索行下方的旋转指示器 + 提示文案"""
-        if hasattr(self, 'loading_row'):
-            self.loading_row.show()
+        """进入深度检索态：点亮结果区域正中的大号旋转浮层 + 提示文案"""
+        # 仅当结果区还没有内容时才亮出居中大转圈；已有结果流式追加则不打扰
+        if hasattr(self, 'loading_overlay') and self.table_model.rowCount() == 0:
+            self.loading_overlay.setGeometry(self.table_view.rect())
+            self.loading_overlay.show()
         if hasattr(self, 'search_loading'):
             self.search_loading.start()
         if hasattr(self, '_loading_timeout'):
             self._loading_timeout.start()
 
     def _stop_search_loading(self):
-        """退出检索态：整行隐去 (结果到达 / 清空输入 / 窗口隐藏 / 兜底超时统一入口)"""
+        """退出检索态：整层隐去 (结果到达 / 清空输入 / 窗口隐藏 / 兜底超时统一入口)"""
         if hasattr(self, 'search_loading'):
             self.search_loading.stop()
-        if hasattr(self, 'loading_row'):
-            self.loading_row.hide()
+        if hasattr(self, 'loading_overlay'):
+            self.loading_overlay.hide()
         if hasattr(self, '_loading_timeout'):
             self._loading_timeout.stop()
 

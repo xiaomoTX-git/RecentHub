@@ -757,12 +757,12 @@ class MainWindow(QMainWindow):
                 self.table_view.hide()
                 self.status_bar.hide()
                 if self.isVisible():
-                    # 高度收敛到极简条后再回到屏幕正中：极简条是"居中悬浮"形态，
-                    # 若沿用工作台/下拉展开时留下的高度锚点，整条会明显偏上或偏下
-                    self._animate_height(self.custom_bar_height, on_finished=self._center_window)
+                    # 高度收敛到极简条；未被拖动过才回屏幕正中 (居中悬浮形态)
+                    self._animate_mode_height(self.custom_bar_height)
                 else:
                     self.resize(self.custom_width, self.custom_bar_height)
-                    self._center_window()
+                    if not self._user_has_dragged:
+                        self._center_window()
             else:
                 self.table_view.show()
                 if abs(self.height() - self.custom_dropdown_height) > 4:
@@ -788,8 +788,8 @@ class MainWindow(QMainWindow):
             h_header.resizeSection(2, 100)
             h_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
 
-            # 工作台是整屏居中的大面板，高度收敛后同样回到屏幕正中
-            self._animate_height(self.custom_workbench_height, on_finished=self._center_window)
+            # 工作台是大面板，高度收敛；位置策略同上 (拖动过后绝不闪回正中)
+            self._animate_mode_height(self.custom_workbench_height)
 
         if recenter and not self._user_has_dragged:
             self._center_window()
@@ -822,6 +822,33 @@ class MainWindow(QMainWindow):
             self.table_view.hide()
             self.status_bar.hide()
 
+    def _animate_mode_height(self, target_h: int):
+        """模式切换高度动画的位置策略：
+        - 用户从未拖动过窗口：收敛后回到屏幕正中 (保持"居中悬浮"的启动器形态)
+        - 用户已拖走窗口：位置归用户所有，仅改高度并做屏幕边界夹取，
+          绝不闪回正中 (否则拖到侧边后一切换模式就跳走，像被抢走一样)"""
+        if not self._user_has_dragged:
+            self._animate_height(target_h, on_finished=self._center_window)
+            return
+
+        def _keep_position():
+            # 高度变化后仅夹取边界：底部不越过任务栏、顶部不出屏、左右不出屏
+            from PySide6.QtGui import QGuiApplication
+            screen = self.screen() or QGuiApplication.primaryScreen()
+            if not screen:
+                return
+            geo = screen.availableGeometry()
+            x, y = self.x(), self.y()
+            max_y = geo.bottom() - self.height() + 1
+            if y > max_y:
+                y = max(geo.top(), max_y)
+            max_x = geo.right() - self.width() + 1
+            if x > max_x:
+                x = max(geo.left(), max_x)
+            self.move(x, y)
+
+        self._animate_height(target_h, on_finished=_keep_position)
+
     def _center_window(self):
         """将窗口移动至当前活动屏幕正中间 (智能避开底部任务栏并支持多屏定位)"""
         from PySide6.QtGui import QGuiApplication, QCursor
@@ -831,6 +858,12 @@ class MainWindow(QMainWindow):
             x = geo.x() + (geo.width() - self.width()) // 2
             y = geo.y() + (geo.height() - self.height()) // 2
             self.move(x, y)
+
+    def _is_on_any_screen(self) -> bool:
+        """窗口与任一屏幕可用区是否相交 (用于拔掉显示器后找回窗口的兜底判断)"""
+        from PySide6.QtGui import QGuiApplication
+        r = self.geometry()
+        return any(r.intersects(s.availableGeometry()) for s in QGuiApplication.screens())
 
     def hide(self):
         self._prepare_background_hibernation()
@@ -897,14 +930,20 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
     def show_and_activate(self):
-        """唤醒主窗口并自动平滑居中定位在当前屏幕正中间 (同时复位选择状态至首行)"""
+        """唤醒主窗口并复位选择状态至首行
+
+        定位策略：用户从未拖动过窗口 -> 回当前屏幕正中 (启动器形态)；
+        拖动过 -> 尊重用户摆放，恢复上次位置，仅在窗口完全落到所有
+        屏幕之外 (如拔掉外接显示器) 时才兜底回正中，避免窗口丢失。
+        """
         if hasattr(self, '_hibernate_timer') and self._hibernate_timer.isActive():
             self._hibernate_timer.stop()
         if hasattr(self, 'system_theme_timer') and not self.system_theme_timer.isActive():
             self._check_system_theme_change()
             self.system_theme_timer.start()
 
-        self._center_window()
+        if not (self._user_has_dragged and self._is_on_any_screen()):
+            self._center_window()
         self.show()
         self.raise_()
         self.activateWindow()

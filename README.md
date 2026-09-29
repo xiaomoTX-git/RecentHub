@@ -10,8 +10,8 @@
 
 | 版本 | 形态 | 说明 | 下载 |
 | :--- | :--- | :--- | :--- |
-| **v1.1.0** | 安装包 | Windows 10/11 64 位，免管理员权限 | **[RecentHub_Setup_v1.1.0.exe](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
-| **v1.1.0** | 便携版 | 免安装 zip，解压即用，数据随目录走 | **[RecentHub_portable_v1.1.0.zip](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
+| **v1.2.0** | 安装包 | Windows 10/11 64 位，免管理员权限 | **[RecentHub_Setup_v1.2.0.exe](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
+| **v1.2.0** | 便携版 | 免安装 zip，解压即用，数据随目录走 | **[RecentHub_portable_v1.2.0.zip](https://github.com/xiaomoTX-git/RecentHub/releases/latest)** |
 
 全部版本见 [Releases](https://github.com/xiaomoTX-git/RecentHub/releases)，逐版本改动见 [CHANGELOG](CHANGELOG.md)。安装包为**当前用户级安装**，全程无 UAC 弹窗；桌面快捷方式与开机自启默认勾选（自启为静默驻留托盘，不弹窗打扰）。
 

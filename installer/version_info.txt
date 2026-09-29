@@ -1,4 +1,4 @@
-# RecentHub 可执行文件版本资源 (PyInstaller EXE 的 version 参数)
+﻿# RecentHub 可执行文件版本资源 (PyInstaller EXE 的 version 参数)
 #
 # 作用：资源管理器「属性 → 详细信息」里显示产品名/版本号/版权，
 #       而不是一片空白；杀软与安装包也据此识别产品身份。
@@ -7,8 +7,8 @@
 
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 1, 0, 0),
-    prodvers=(1, 1, 0, 0),
+    filevers=(1, 2, 0, 0),
+    prodvers=(1, 2, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -23,22 +23,22 @@ VSVersionInfo(
           '080404b0',
           [StringStruct('CompanyName', 'RecentHub'),
            StringStruct('FileDescription', 'RecentHub 最近记录秒搜与重开工具'),
-           StringStruct('FileVersion', '1.1.0.0'),
+           StringStruct('FileVersion', '1.2.0.0'),
            StringStruct('InternalName', 'RecentHub'),
            StringStruct('LegalCopyright', 'Copyright (C) 2026 RecentHub'),
            StringStruct('OriginalFilename', 'RecentHub.exe'),
            StringStruct('ProductName', 'RecentHub'),
-           StringStruct('ProductVersion', '1.1.0')]),
+           StringStruct('ProductVersion', '1.2.0')]),
         StringTable(
           '040904b0',
           [StringStruct('CompanyName', 'RecentHub'),
            StringStruct('FileDescription', 'RecentHub - Recent Files Instant Search'),
-           StringStruct('FileVersion', '1.1.0.0'),
+           StringStruct('FileVersion', '1.2.0.0'),
            StringStruct('InternalName', 'RecentHub'),
            StringStruct('LegalCopyright', 'Copyright (C) 2026 RecentHub'),
            StringStruct('OriginalFilename', 'RecentHub.exe'),
            StringStruct('ProductName', 'RecentHub'),
-           StringStruct('ProductVersion', '1.1.0')])
+           StringStruct('ProductVersion', '1.2.0')])
       ]),
     VarFileInfo([VarStruct('Translation', [2052, 1200, 1033, 1200])])
   ]

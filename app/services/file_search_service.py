@@ -77,6 +77,42 @@ class FileSearchService:
         return ""
 
     @classmethod
+    def channel_status(cls) -> dict:
+        """搜索通道体检：三条召回通道可用性一目了然 (供设置面板诊断展示)
+
+        - es_path: Everything 命令行工具路径 (空串 = 未安装，全盘深度搜索不可用)
+        - windows_search: SystemIndex 是否可查询 (索引服务运行中)
+        - fast_crawl 恒可用，无需检测
+        """
+        es_path = cls._find_es()
+        ws_ok = False
+        conn = None
+        try:
+            import pythoncom
+            import win32com.client
+            pythoncom.CoInitialize()
+            conn = win32com.client.Dispatch("ADODB.Connection")
+            conn.Open("Provider=Search.CollatorDSO;Extended Properties='Application=Windows';")
+            rs = win32com.client.Dispatch("ADODB.Recordset")
+            rs.Open("SELECT TOP 1 System.ItemUrl FROM SystemIndex", conn)
+            ws_ok = True
+            rs.Close()
+        except Exception:
+            ws_ok = False
+        finally:
+            try:
+                if conn is not None:
+                    conn.Close()
+            except Exception:
+                pass
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+        return {"es_path": es_path, "windows_search": ws_ok}
+
+    @classmethod
     def search_live(cls, query: str, limit: int = 60) -> List[RecentItem]:
         """全盘实时检索入口"""
         if not query or len(query.strip()) < 2:

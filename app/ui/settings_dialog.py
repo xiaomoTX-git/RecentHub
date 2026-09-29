@@ -426,6 +426,52 @@ class SettingsDialog(QDialog):
         self.log_hint_lbl = QLabel("运行日志按 1MB 自动轮转保存在数据目录 logs 下")
         self.log_hint_lbl.setStyleSheet("font-size: 11px; opacity: 0.60; padding: 2px 0;")
         diag_section.addWidget(self.log_hint_lbl)
+
+        # 搜索通道体检：三条召回通道可用性一目了然，搜不到文件时先看这里
+        chan_title = QLabel("搜索通道")
+        chan_title.setStyleSheet("font-size: 12px; font-weight: 600; opacity: 0.7;")
+        diag_section.addWidget(chan_title)
+        try:
+            from app.services.file_search_service import FileSearchService
+            chan = FileSearchService.channel_status()
+        except Exception:
+            chan = {"es_path": "", "windows_search": False}
+        ok_col, warn_col = "#3FB950", "#E3B341"
+        es_ok = bool(chan.get("es_path"))
+        es_lbl = QLabel(
+            f'<span style="color:{ok_col};">●</span> Everything 命令行 (es.exe)：已就绪'
+            if es_ok else
+            f'<span style="color:{warn_col};">●</span> Everything 命令行 (es.exe)：未安装 —— 全盘深层搜索不可用'
+        )
+        ws_ok = bool(chan.get("windows_search"))
+        ws_lbl = QLabel(
+            f'<span style="color:{ok_col};">●</span> Windows Search 索引：可用'
+            if ws_ok else
+            f'<span style="color:{warn_col};">●</span> Windows Search 索引：不可用'
+        )
+        fc_lbl = QLabel('<span style="color:{col};">●</span> 快扫兜底：始终可用 · 仅覆盖盘根与热区 3 层'.format(col=ok_col))
+        for lbl in (es_lbl, ws_lbl, fc_lbl):
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setStyleSheet("font-size: 11px; opacity: 0.85;")
+            diag_section.addWidget(lbl)
+
+        chan_btn_row = QHBoxLayout()
+        get_ev_btn = QPushButton("获取 Everything")
+        get_ev_btn.setObjectName("PresetHkBtn")
+        get_ev_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        get_ev_btn.clicked.connect(lambda: os.startfile("https://www.voidtools.com/downloads/"))
+        chan_btn_row.addWidget(get_ev_btn)
+        enh_btn = QPushButton("增强索引设置")
+        enh_btn.setObjectName("PresetHkBtn")
+        enh_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        enh_btn.clicked.connect(lambda: os.startfile("ms-settings:search"))
+        chan_btn_row.addWidget(enh_btn)
+        chan_btn_row.addStretch()
+        diag_section.addLayout(chan_btn_row)
+
+        chan_hint_lbl = QLabel("搜不到深层文件时：优先在「增强索引设置」里切换为增强范围，或安装 Everything + es.exe")
+        chan_hint_lbl.setStyleSheet("font-size: 11px; opacity: 0.60; padding: 2px 0;")
+        diag_section.addWidget(chan_hint_lbl)
         body.addLayout(diag_section)
 
         # 7. 版本与更新 (启动时静默检查 GitHub Releases，仅提示不静默安装)
@@ -528,7 +574,7 @@ class SettingsDialog(QDialog):
 
         # 9. 极简速查说明 (仅一行轻质中性提示)
         self.shortcut_hint_lbl = QLabel(
-            "↓/↑ 键盘选词  ·  Enter 立即打开  ·  Alt+Enter 定位目录  ·  Esc 隐藏"
+            "↓/↑ 键盘选词  ·  Enter 立即打开  ·  Alt+Enter 定位目录  ·  Ctrl+C 复制路径  ·  Esc 隐藏"
         )
         self.shortcut_hint_lbl.setStyleSheet("font-size: 11px; opacity: 0.60; padding: 2px 0;")
         body.addWidget(self.shortcut_hint_lbl)

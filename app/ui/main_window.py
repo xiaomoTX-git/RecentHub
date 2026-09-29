@@ -231,14 +231,16 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.central_card)
 
         self.card_layout = QVBoxLayout(self.central_card)
-        self.card_layout.setContentsMargins(14, 10, 14, 10)
+        # 垂直边距 7px：胶囊条高 48 - 14 = 34 恰好容纳搜索行 (34)，
+        # 此前上下各 10 + 行高 34 = 54 > 48，溢出被下边距吸收导致输入框整体偏下
+        self.card_layout.setContentsMargins(14, 7, 14, 7)
         self.card_layout.setSpacing(6)
 
         # 1. 顶部搜索行 (自然呼吸留白，告别硬线条)
         self.search_row = QWidget()
         self.search_row.setObjectName("SearchRow")
         search_layout = QHBoxLayout(self.search_row)
-        search_layout.setContentsMargins(2, 2, 2, 4)
+        search_layout.setContentsMargins(2, 2, 2, 2)
         search_layout.setSpacing(10)
 
         # 搜索框左侧极简线性放大镜图标 (支持窗口拖动锚点)
@@ -255,7 +257,8 @@ class MainWindow(QMainWindow):
 
         self.search_edit = QLineEdit()
         self.search_edit.setObjectName("SearchInput")
-        self.search_edit.setFixedHeight(30)
+        # 输入框高度随胶囊条厚度自适应 (可拖拽 42~72px)，保证任何厚度下都垂直居中
+        self._apply_search_row_height()
         self.search_edit.setPlaceholderText("键入以秒搜最近记录 (支持拼音如 wz、文件名、扩展名)...")
         self.search_edit.setClearButtonEnabled(True)
         search_layout.addWidget(self.search_edit)
@@ -278,7 +281,8 @@ class MainWindow(QMainWindow):
         self.mode_toggle_btn.setIconSize(QSize(16, 16))
         search_layout.addWidget(self.mode_toggle_btn)
 
-        self.search_row.setFixedHeight(34)
+        # 不再固定行高：Mode A 下布局仅此一行可见，自动撑满可用高度
+        # (窗口高 - 上下边距)，输入框由行内布局垂直居中，任何胶囊厚度都不偏移
         self.search_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.card_layout.addWidget(self.search_row, 0, Qt.AlignmentFlag.AlignTop)
 
@@ -533,6 +537,17 @@ class MainWindow(QMainWindow):
         self.setGeometry(new_x, new_y, new_w, new_h)
         self.custom_width = new_w
         self.WINDOW_WIDTH = new_w
+        # 胶囊条厚度被拖拽调整后，输入框高度随之自适应以保持垂直居中
+        if hasattr(self, 'search_edit'):
+            self._apply_search_row_height()
+
+    def _apply_search_row_height(self):
+        """搜索输入框高度自适应：跟随可拖拽的胶囊条厚度 (42~72px)，上限 30px"""
+        try:
+            h = min(30, max(24, self.custom_bar_height - 18))
+        except Exception:
+            h = 30
+        self.search_edit.setFixedHeight(h)
 
     def _save_window_config(self):
         ConfigManager.save_window_size(
@@ -690,6 +705,14 @@ class MainWindow(QMainWindow):
                 self._stop_all_navigation()
                 self._open_selected_item()
                 return True
+            elif key == Qt.Key.Key_C and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                # Ctrl+C 语义分流：搜索框有选中文本 -> 不拦截，走原生复制文本；
+                # 否则复制当前选中条目的完整路径 (启动器高频刚需)
+                if not self.search_edit.selectedText():
+                    item = self._get_current_selected_item()
+                    if item:
+                        QApplication.clipboard().setText(item.target_path)
+                        return True
         elif event.type() == QEvent.Type.KeyRelease:
             if event.key() in (Qt.Key.Key_Down, Qt.Key.Key_Up):
                 # 仅"真实松手"才刹车。Windows 长按时会成对投递

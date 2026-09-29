@@ -93,6 +93,16 @@ class FileSearchService:
             expanded_keywords.update(["米哈", "mihoyo", "mihomo"])
         if "hosts" in q_lower:
             expanded_keywords.add("hosts")
+
+        # 关键词按精确度排序：完整短语 (Everything/Windows Search 里空格 = AND)
+        # 优先于去分隔符变体，单 token 兜底垫底。此前用 set 随机切片，宽泛 token
+        # (如 "cuda") 先挤满召回配额，精确短语 (如 "cuda 13.3") 永远轮不到
+        ordered_kws: List[str] = [q_lower]
+        if q_clean != q_lower:
+            ordered_kws.append(q_clean)
+        ordered_kws.extend(t for t in tokens if t not in ordered_kws)
+        ordered_kws.extend(k for k in sorted(expanded_keywords) if k not in ordered_kws)
+        ordered_kws = [k for k in ordered_kws if len(k) >= 2][:5]
             
         results: List[RecentItem] = []
         seen: Set[str] = set()
@@ -114,7 +124,7 @@ class FileSearchService:
         es_bin = cls._find_es()
         if es_bin:
             try:
-                for kw in list(expanded_keywords)[:3]:
+                for kw in ordered_kws[:3]:
                     cmd = [es_bin, "-n", str(limit), kw]
                     # 后台常驻线程内执行，1.5s 超时只影响本轮召回上限，不卡 UI；
                     # 0.8s 在冷索引/大磁盘上经常整通道超时，导致召回少得可疑
@@ -151,18 +161,26 @@ class FileSearchService:
             conn.Open("Provider=Search.CollatorDSO;Extended Properties='Application=Windows';")
             rs = win32com.client.Dispatch("ADODB.Recordset")
             
-            for kw in list(expanded_keywords)[:4]:
+            for kw in ordered_kws[:4]:
                 if len(kw) < 2:
                     continue
                 safe_q = _sanitize_like(kw).replace("'", "''")
                 if not safe_q:
                     continue
-                sql = f"SELECT TOP {limit} System.ItemName, System.ItemPathDisplay, System.DateModified FROM SystemIndex WHERE System.ItemName LIKE '%{safe_q}%' OR System.ItemPathDisplay LIKE '%{safe_q}%'"
+                # ItemUrl 是真实文件系统路径 (file:C:/... 前缀需转换)；ItemPathDisplay
+                # 是本地化显示路径 (中文系统会把 桌面/文档 显示成 C:\用户\...)，
+                # exists() 全部判 False，曾导致该通道结果被静默丢弃。
+                # ORDER BY 让前缀/全词匹配稳定置顶，否则 TOP N 是任意子集，时有时无
+                sql = f"SELECT TOP {limit} System.ItemName, System.ItemUrl, System.DateModified FROM SystemIndex WHERE System.ItemName LIKE '%{safe_q}%' OR System.ItemPathDisplay LIKE '%{safe_q}%' ORDER BY System.ItemName ASC"
                 try:
                     rs.Open(sql, conn)
                     while not rs.EOF:
                         name = str(rs.Fields("System.ItemName").Value or "")
-                        path = str(rs.Fields("System.ItemPathDisplay").Value or "")
+                        url_val = str(rs.Fields("System.ItemUrl").Value or "")
+                        if url_val.lower().startswith("file:"):
+                            path = url_val[5:].replace("/", "\\")
+                        else:
+                            path = url_val
                         if path and os.path.exists(path):
                             norm = os.path.normpath(path)
                             if norm.lower() not in seen:
@@ -221,8 +239,23 @@ class FileSearchService:
             '$recycle.bin', 'system volume information', 'recovery', 'programdata'
         }
 
+        def _match_rank(name_str: str) -> int:
+            """结果相关性分级：完整短语/全部 token 命中 (2) 优先于单 token 泛洪 (1)。
+
+            BFS 深度有限，能扫到的本就只有浅层文件；把 "CUDA 13.3.props" 这类
+            全词命中排到 "cuda" 单 token 泛洪之前，浅层结果才有关联价值。
+            稳定排序保持同组内的发现顺序。"""
+            nl = name_str.lower()
+            nc = nl.replace(" ", "").replace("-", "").replace("_", "")
+            if q_lower in nl or q_clean in nc:
+                return 2
+            if tokens and all(t in nl for t in tokens):
+                return 2
+            return 1
+
         start_time = time.time()
-        while queue and (time.time() - start_time) < 0.25 and len(results) < limit:
+        exhausted = False
+        while queue and not exhausted and (time.time() - start_time) < 0.25 and len(results) < limit:
             cur_dir, depth = queue.popleft()
             try:
                 with os.scandir(cur_dir) as it:
@@ -238,13 +271,14 @@ class FileSearchService:
                                 mtime = int(entry.stat().st_mtime)
                             except Exception:
                                 mtime = 0
-                            
+
                             is_d = entry.is_dir(follow_symlinks=False)
                             it_item = normalize_item(full_p, display_name=entry.name, last_used_at=mtime, source="fast_crawl")
                             it_item.item_type = "folder" if is_d else ("app" if entry.name.lower().endswith(".exe") else "file")
                             results.append(it_item)
                             if len(results) >= limit:
-                                return results
+                                exhausted = True
+                                break
 
                         if entry.is_dir(follow_symlinks=False) and depth < 3:
                             if name_lower not in skip_dirs and not name_lower.startswith('.'):
@@ -255,4 +289,5 @@ class FileSearchService:
             except (PermissionError, FileNotFoundError, OSError):
                 continue
 
+        results.sort(key=lambda it: _match_rank(it.display_name), reverse=True)
         return results

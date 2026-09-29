@@ -5,9 +5,9 @@
     app/resources/app_icon.png   512x512 高清 PNG (窗口图标 / 高清位图母版)
     app/resources/app_icon.ico   多尺寸 ICO (16/24/32/48/64/128/256)
 
-设计: 透明背景纯线条 (类 GPT 极简风) —— 放大镜内嵌时钟指针,
-「最近记录 + 秒搜」合为一笔。单色 #8B5CF6 主线 + #C4B5FD 浅紫指针,
-无底板、无渐变、无阴影, 20/256 单位圆头粗描边保证 16px 下依旧锐利可辨。
+设计: 透明背景纯线条 (类 GPT 极简风) —— 四格磁贴 + 右下格内嵌小闪电,
+应用启动器网格隐喻 + 「秒搜的快」。纯黑 #111 描边, fill none, 圆头圆角,
+无底板、无渐变、无阴影; 磁贴 12/256、闪电 9/256 描边, 16px 下依旧可辨。
 
 为什么要逐尺寸原生渲染:
     旧图标 ICO 里只有一帧 256x256。任务栏/托盘实际是 16~48px, 全靠系统
@@ -34,11 +34,12 @@ PNG_SIZE = 512
 BMP_MAX_SIZE = 64  # 该尺寸及以下用 DIB 帧, 以上用 PNG 帧
 
 APP_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="112" cy="112" r="62" stroke="#8B5CF6" stroke-width="20"/>
-    <line x1="157" y1="157" x2="200" y2="200" stroke="#8B5CF6" stroke-width="22"/>
-    <line x1="112" y1="112" x2="112" y2="70" stroke="#C4B5FD" stroke-width="16"/>
-    <line x1="112" y1="112" x2="146" y2="128" stroke="#C4B5FD" stroke-width="16"/>
+  <g fill="none" stroke="#111111" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="56" y="56" width="64" height="64" rx="14" stroke-width="12"/>
+    <rect x="136" y="56" width="64" height="64" rx="14" stroke-width="12"/>
+    <rect x="56" y="136" width="64" height="64" rx="14" stroke-width="12"/>
+    <rect x="136" y="136" width="64" height="64" rx="14" stroke-width="12"/>
+    <path d="M178 142 L154 174 L170 174 L164 198 L190 168 L172 168 Z" stroke-width="9"/>
   </g>
 </svg>"""
 

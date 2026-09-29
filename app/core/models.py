@@ -5,6 +5,19 @@ RecentHub 核心数据模型 (轻量级 __slots__ 优化)
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+# 「类型筛选」的单一真源：类型键 → 扩展名集合。
+# 搜索语法 type:xxx、类型药丸过滤 (SQL + UI 谓词) 与 item_type 推断三方共用，
+# 保证「类型」列显示与药丸过滤语义永远一致。未列入的键按 items.item_type 匹配。
+# doc = 文档类：word 系 + 常见纯文本文档。
+TYPE_EXTENSION_MAP = {
+    'word': ('.doc', '.docx', '.wps', '.dot', '.dotx'),
+    'excel': ('.xls', '.xlsx', '.csv', '.et', '.xlt', '.xltx'),
+    'pdf': ('.pdf',),
+    'code': ('.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json',
+             '.cpp', '.c', '.h', '.java', '.sql', '.sh', '.bat', '.ps1'),
+    'doc': ('.doc', '.docx', '.wps', '.dot', '.dotx', '.txt', '.md', '.rtf'),
+}
+
 
 @dataclass(slots=True)
 class RecentItem:

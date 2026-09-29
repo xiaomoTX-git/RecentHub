@@ -6,7 +6,7 @@ RecentHub 路径规范化与元数据提纯器
 import os
 import ctypes
 from typing import Tuple
-from app.core.models import RecentItem
+from app.core.models import RecentItem, TYPE_EXTENSION_MAP
 from app.parsers.pinyin_engine import get_initials, get_pinyin_full
 
 _APP_EXTENSIONS = {'.exe', '.cmd', '.bat', '.ps1', '.msi', '.vbs'}
@@ -27,18 +27,30 @@ def get_long_path(path: str) -> str:
 
 
 def infer_item_type(path: str, ext: str) -> str:
-    """推断条目类型: 'app' | 'folder' | 'url' | 'file'"""
+    """推断条目类型: 'app' | 'folder' | 'url' | 'code' | 'word' | 'excel' | 'pdf' | 'file'
+
+    扩展名分类与 TYPE_EXTENSION_MAP (类型药丸 / type: 语法) 同源，保证
+    「类型」列显示与药丸过滤语义一致 (此前 .json 显示「文档」却能命中「代码」药丸)。
+    """
     p_lower = path.lower()
     if p_lower.startswith(('http://', 'https://', 'ftp://')):
         return 'url'
-    
+
     if ext in _APP_EXTENSIONS:
         return 'app'
-    
+
     # 快速探测目录
     if os.path.isdir(path):
         return 'folder'
-    
+
+    for type_key in ('code', 'word', 'excel', 'pdf'):
+        if ext and ext in TYPE_EXTENSION_MAP[type_key]:
+            return type_key
+
+    # 纯文本文档 (.txt/.md/.rtf) 归入 word：显示「文档」并命中「文档」药丸
+    if ext and ext in TYPE_EXTENSION_MAP['doc']:
+        return 'word'
+
     return 'file'
 
 

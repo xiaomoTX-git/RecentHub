@@ -39,7 +39,11 @@ def format_relative_time(timestamp: int) -> str:
 
 TYPE_LABELS = {
     'app': '应用',
-    'file': '文档',
+    'word': '文档',
+    'excel': '表格',
+    'pdf': 'PDF',
+    'code': '代码',
+    'file': '文件',
     'folder': '文件夹',
     'url': '链接'
 }

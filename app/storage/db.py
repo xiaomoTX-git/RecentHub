@@ -10,21 +10,10 @@ import threading
 import time
 from typing import List, Optional, Tuple
 from app.core import paths
-from app.core.models import RecentItem, ExcludedRule
+from app.core.models import RecentItem, ExcludedRule, TYPE_EXTENSION_MAP
 from app.parsers.pinyin_engine import match_score
 
 logger = logging.getLogger(__name__)
-
-# 「类型筛选」的单一真源：类型键 → 扩展名集合。
-# db 侧的 SQL 过滤与 UI 侧的实时结果过滤共用同一份定义，杜绝两处语义漂移。
-# 未出现在此表中的类型键一律按 items.item_type 精确匹配 (如 app / folder)。
-TYPE_EXTENSION_MAP = {
-    'word': ('.doc', '.docx', '.wps', '.dot', '.dotx'),
-    'excel': ('.xls', '.xlsx', '.csv', '.et', '.xlt', '.xltx'),
-    'pdf': ('.pdf',),
-    'code': ('.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json',
-             '.cpp', '.c', '.h', '.java', '.sql', '.sh', '.bat', '.ps1'),
-}
 
 
 def item_matches_filters(
@@ -42,9 +31,6 @@ def item_matches_filters(
         mapped = TYPE_EXTENSION_MAP.get(item_type)
         if mapped:
             if (item.extension or '').lower() not in mapped:
-                return False
-        elif item_type == 'doc':
-            if item.item_type != 'file':
                 return False
         elif item.item_type != item_type:
             return False
@@ -230,6 +216,7 @@ class StorageDB:
                     pinned = MAX(items.pinned, excluded.pinned),
                     exists_status = excluded.exists_status,
                     display_name = excluded.display_name,
+                    item_type = excluded.item_type,
                     pinyin_initials = excluded.pinyin_initials,
                     pinyin_full = excluded.pinyin_full
                 RETURNING id;
@@ -259,8 +246,6 @@ class StorageDB:
         exts = TYPE_EXTENSION_MAP.get(item_type)
         if exts:
             return f" AND LOWER(i.extension) IN ({','.join(['?']*len(exts))})", list(exts)
-        if item_type == 'doc':
-            return " AND i.item_type = ?", ['file']
         return " AND i.item_type = ?", [item_type]
 
     @staticmethod

@@ -5,6 +5,7 @@ RecentHub 应用程序主入口
 
 import sys
 import os
+import time
 
 # 确保 app 根路径与虚拟环境 site-packages / win32 在 sys.path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,7 +28,7 @@ if not getattr(sys, "frozen", False):
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from app.core.paths import resource_dir
 from app.core.logging_setup import setup_logging
@@ -35,6 +36,7 @@ from app.storage.db import StorageDB
 from app.services.scan_service import ScanService
 from app.services.hotkey_service import HotkeyService
 from app.services.autostart_service import AutoStartService
+from app.services.update_service import UpdateCheckWorker
 from app.core.config import ConfigManager
 from app.ui.main_window import MainWindow
 from app.ui.tray import TrayService
@@ -125,6 +127,15 @@ def main():
             hotkey_service.unregister()
         except Exception:
             pass
+        # 更新检查线程若仍在网络请求中，必须等它退出 (留足超时裕量后强杀)，
+        # 绝不允许 QThread 带线程析构导致退出阶段 qFatal 崩溃
+        try:
+            if update_worker is not None and update_worker.isRunning():
+                if not update_worker.wait(5000):
+                    update_worker.terminate()
+                    update_worker.wait(1000)
+        except Exception:
+            pass
         try:
             db.close_all()
         except Exception:
@@ -139,6 +150,34 @@ def main():
             AutoStartService.refresh()
     except Exception:
         pass
+
+    # 7. 启动时静默检查更新：每日最多一次，延迟 3 秒错开启动峰值，
+    #    结果仅托盘气泡提示 (点击直达下载页)，失败只落日志不打扰用户
+    update_worker = None
+
+    def _maybe_check_update():
+        nonlocal update_worker
+        try:
+            cfg = ConfigManager.load()
+        except Exception:
+            return
+        if not cfg.get("auto_check_update", True):
+            return
+        if time.time() - float(cfg.get("last_update_check", 0)) < 86400:
+            return
+
+        def _on_checked(info: dict):
+            if info.get("is_newer"):
+                tray.notify_update(info.get("tag", ""), info.get("url", ""))
+            # 仅成功检查才记录时间戳：失败下次启动重试，避免断网期被"跳过一整天"
+            if not info.get("failed"):
+                ConfigManager.update("last_update_check", int(time.time()))
+
+        update_worker = UpdateCheckWorker(timeout=4.0)
+        update_worker.checked.connect(_on_checked)
+        update_worker.start()
+
+    QTimer.singleShot(3000, _maybe_check_update)
 
     # 默认启动即唤出主窗口；开机自启 (--silent) 则不唤出，仅静默驻留托盘
     if not silent_start:

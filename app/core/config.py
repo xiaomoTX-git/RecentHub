@@ -35,6 +35,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     # 日志级别 (DEBUG / INFO / WARNING / ERROR)：仅影响落盘日志详细程度，暂无 UI 入口
     "log_level": "INFO",
 
+    # 启动时自动检查更新：每日最多一次静默查询 GitHub Releases，仅气泡提示不静默安装
+    "auto_check_update": True,
+    "last_update_check": 0,                 # 上次成功检查的 Unix 时间戳 (失败不记录，下次启动重试)
+
     # 现代组件库与设计系统 Tokens (Windows 11 Fluent + Raycast)
     "design_system": "fluent_acrylic",      # fluent_acrylic | raycast_glass | pure_minimal
     "accent_color": "#8B5CF6",              # 与默认深色主题一致的沉浸紫

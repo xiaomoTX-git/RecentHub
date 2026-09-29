@@ -13,13 +13,15 @@ from typing import Callable, Optional
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QCheckBox, QWidget, QSlider, QScrollArea, QLineEdit,
-    QListWidget, QListWidgetItem, QButtonGroup, QFrame
+    QListWidget, QListWidgetItem, QButtonGroup, QFrame, QApplication
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QTimer
 from PySide6.QtGui import QCursor, QFont, QKeySequence
 
 from app.core.config import ConfigManager
 from app.core.paths import log_dir
+from app.core.version import APP_VERSION
+from app.services.update_service import UpdateCheckWorker
 from app.ui.themes import THEMES, get_theme, get_card_bg_with_opacity
 from app.services.autostart_service import AutoStartService
 from app.services.hotkey_service import HotkeyService
@@ -203,6 +205,9 @@ class SettingsDialog(QDialog):
         self.opacity_save_timer.setSingleShot(True)
         self.opacity_save_timer.setInterval(200)
         self.opacity_save_timer.timeout.connect(self._persist_opacity)
+
+        # 手动「检查更新」的后台线程引用 (None = 空闲)
+        self._update_worker = None
 
         self.setWindowTitle("RecentHub 设置")
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
@@ -423,7 +428,39 @@ class SettingsDialog(QDialog):
         diag_section.addWidget(self.log_hint_lbl)
         body.addLayout(diag_section)
 
-        # 7. 排除规则 (自助管理不再收录的目录 / 文件名 / 扩展名)
+        # 7. 版本与更新 (启动时静默检查 GitHub Releases，仅提示不静默安装)
+        upd_section = QVBoxLayout()
+        upd_section.setSpacing(6)
+        upd_title = QLabel("版本与更新")
+        upd_title.setStyleSheet("font-size: 12px; font-weight: 600; opacity: 0.7;")
+        upd_section.addWidget(upd_title)
+
+        self.auto_update_cb = QCheckBox("启动时自动检查更新 (每日最多一次，仅提示)")
+        self.auto_update_cb.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.auto_update_cb.setChecked(cfg.get("auto_check_update", True))
+        self.auto_update_cb.toggled.connect(self._on_auto_update_toggled)
+        upd_section.addWidget(self.auto_update_cb)
+
+        upd_row = QHBoxLayout()
+        self.version_lbl = QLabel(f"当前版本 v{APP_VERSION}")
+        self.version_lbl.setStyleSheet("font-size: 11px; opacity: 0.60;")
+        upd_row.addWidget(self.version_lbl)
+        upd_row.addStretch()
+        self.check_update_btn = QPushButton("检查更新")
+        self.check_update_btn.setObjectName("PresetHkBtn")
+        self.check_update_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.check_update_btn.clicked.connect(self._on_check_update)
+        upd_row.addWidget(self.check_update_btn)
+        upd_section.addLayout(upd_row)
+
+        self.update_hint_lbl = QLabel("")
+        self.update_hint_lbl.setStyleSheet("font-size: 11px; opacity: 0.80; padding: 2px 0;")
+        self.update_hint_lbl.setOpenExternalLinks(True)
+        self.update_hint_lbl.hide()
+        upd_section.addWidget(self.update_hint_lbl)
+        body.addLayout(upd_section)
+
+        # 8. 排除规则 (自助管理不再收录的目录 / 文件名 / 扩展名)
         rules_section = QVBoxLayout()
         rules_section.setSpacing(8)
         rules_title = QLabel("排除规则")
@@ -489,14 +526,14 @@ class SettingsDialog(QDialog):
         rules_section.addWidget(self.rule_hint_lbl)
         body.addLayout(rules_section)
 
-        # 8. 极简速查说明 (仅一行轻质中性提示)
+        # 9. 极简速查说明 (仅一行轻质中性提示)
         self.shortcut_hint_lbl = QLabel(
             "↓/↑ 键盘选词  ·  Enter 立即打开  ·  Alt+Enter 定位目录  ·  Esc 隐藏"
         )
         self.shortcut_hint_lbl.setStyleSheet("font-size: 11px; opacity: 0.60; padding: 2px 0;")
         body.addWidget(self.shortcut_hint_lbl)
 
-        # 9. 底部完成按钮
+        # 10. 底部完成按钮
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self.done_btn = QPushButton("完成")
@@ -607,6 +644,43 @@ class SettingsDialog(QDialog):
         except Exception:
             # 资源管理器不可用等极端情况：静默忽略，绝不因诊断按钮而弹错
             pass
+
+    # ---- 版本与更新 ----
+
+    def _on_auto_update_toggled(self, checked: bool):
+        ConfigManager.update("auto_check_update", bool(checked))
+
+    def _on_check_update(self):
+        """手动检查更新：后台线程查询 GitHub，结果回填到内联提示行"""
+        if self._update_worker is not None and self._update_worker.isRunning():
+            return
+        self.check_update_btn.setEnabled(False)
+        self.check_update_btn.setText("检查中...")
+        # parent 到 QApplication：设置面板关闭也不销毁运行中的线程，
+        # 彻底杜绝 QThread 带线程析构的 qFatal 崩溃；结束后 deleteLater 自清
+        self._update_worker = UpdateCheckWorker(timeout=6.0, parent=QApplication.instance())
+        self._update_worker.checked.connect(self._on_update_checked)
+        self._update_worker.finished.connect(self._on_update_worker_finished)
+        self._update_worker.start()
+
+    def _on_update_worker_finished(self):
+        w = self._update_worker
+        self._update_worker = None
+        if w is not None:
+            w.deleteLater()
+
+    def _on_update_checked(self, info: dict):
+        self.check_update_btn.setEnabled(True)
+        self.check_update_btn.setText("检查更新")
+        if info.get("failed"):
+            self.update_hint_lbl.setText("检查失败：网络不可达或被限流，可稍后重试")
+        elif info.get("is_newer"):
+            tag = info.get("tag") or "新版本"
+            url = info.get("url") or "https://github.com/xiaomoTX-git/RecentHub/releases/latest"
+            self.update_hint_lbl.setText(f'发现新版本 <a href="{url}">{tag}</a>，点击前往下载')
+        else:
+            self.update_hint_lbl.setText("已是最新版本")
+        self.update_hint_lbl.show()
 
     # ---- 排除规则管理 ----
 

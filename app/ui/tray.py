@@ -33,6 +33,8 @@ class TrayService(QObject):
 
         self._init_menu()
         self.tray_icon.activated.connect(self._on_tray_activated)
+        self.tray_icon.messageClicked.connect(self._on_message_clicked)
+        self._release_url = ""
         self.tray_icon.show()
 
     def _init_menu(self):
@@ -91,6 +93,25 @@ class TrayService(QObject):
         (窗口显隐开关才走 toggle_window，绑在全局热键上，保持 Spotlight 手感)
         """
         self.main_window.show_and_activate()
+
+    def notify_update(self, version: str, url: str):
+        """气泡提示发现新版本；点击气泡直接打开 Release 下载页"""
+        self._release_url = url or "https://github.com/xiaomoTX-git/RecentHub/releases/latest"
+        self.tray_icon.showMessage(
+            f"RecentHub {version} 已发布",
+            "点击前往下载页更新",
+            QSystemTrayIcon.MessageIcon.Information,
+            8000,
+        )
+
+    def _on_message_clicked(self):
+        if not self._release_url:
+            return
+        try:
+            os.startfile(self._release_url)
+        except Exception:
+            # 系统无默认浏览器等极端情况：静默忽略，绝不因气泡点击而弹错
+            pass
 
     def _is_fullscreen_dnd(self) -> bool:
         """全屏免打扰：处于全屏 (游戏/观影) 时返回 True，快捷键唤出应静默忽略"""

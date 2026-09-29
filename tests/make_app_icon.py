@@ -35,11 +35,11 @@ BMP_MAX_SIZE = 64  # 该尺寸及以下用 DIB 帧, 以上用 PNG 帧
 
 APP_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
   <g fill="none" stroke="#111111" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="56" y="56" width="64" height="64" rx="14" stroke-width="12"/>
-    <rect x="136" y="56" width="64" height="64" rx="14" stroke-width="12"/>
-    <rect x="56" y="136" width="64" height="64" rx="14" stroke-width="12"/>
-    <rect x="136" y="136" width="64" height="64" rx="14" stroke-width="12"/>
-    <path d="M178 142 L154 174 L170 174 L164 198 L190 168 L172 168 Z" stroke-width="9"/>
+    <rect x="14" y="14" width="104" height="104" rx="18" stroke-width="14"/>
+    <rect x="138" y="14" width="104" height="104" rx="18" stroke-width="14"/>
+    <rect x="14" y="138" width="104" height="104" rx="18" stroke-width="14"/>
+    <rect x="138" y="138" width="104" height="104" rx="18" stroke-width="14"/>
+    <path d="M204 148 L154 208 L186 208 L177 232 L222 170 L196 170 Z" stroke-width="11"/>
   </g>
 </svg>"""
 

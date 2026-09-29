@@ -98,7 +98,7 @@ class PersistentSearchWorker(QThread):
                     continue
 
                 try:
-                    items = FileSearchService.search_live(query, limit=35)
+                    items = FileSearchService.search_live(query)
                     # 再次确认仍为最新词且未被终止
                     if self._is_running and token == self._current_token:
                         self.results_ready.emit(query, items)

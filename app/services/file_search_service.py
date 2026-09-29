@@ -77,7 +77,7 @@ class FileSearchService:
         return ""
 
     @classmethod
-    def search_live(cls, query: str, limit: int = 35) -> List[RecentItem]:
+    def search_live(cls, query: str, limit: int = 60) -> List[RecentItem]:
         """全盘实时检索入口"""
         if not query or len(query.strip()) < 2:
             return []
@@ -116,7 +116,9 @@ class FileSearchService:
             try:
                 for kw in list(expanded_keywords)[:3]:
                     cmd = [es_bin, "-n", str(limit), kw]
-                    proc = subprocess.run(cmd, capture_output=True, timeout=0.8)
+                    # 后台常驻线程内执行，1.5s 超时只影响本轮召回上限，不卡 UI；
+                    # 0.8s 在冷索引/大磁盘上经常整通道超时，导致召回少得可疑
+                    proc = subprocess.run(cmd, capture_output=True, timeout=1.5)
                     if proc.returncode == 0 and proc.stdout:
                         for line in _decode_console(proc.stdout).splitlines():
                             fp = line.strip()

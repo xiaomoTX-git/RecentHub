@@ -1227,10 +1227,16 @@ class MainWindow(QMainWindow):
             self._start_search_loading()
 
     def _select_item_type(self, type_key: str):
-        """类型药丸切换：按新类型重新检索并刷新本地视图 (异步 live 结果由谓词过滤)"""
+        """类型药丸切换：按新类型重新检索并刷新视图
+
+        必须走 reload_data() 重触发 Tier 2 全盘异步检索：像 "excel" 这种
+        关键词的命中几乎全部来自全盘通道，只跑 Tier 1 本地库会得到空列表，
+        且切回「全部」也保持空白，逼用户重新输入才能恢复搜索。
+        异步 live 结果返回后由谓词按当前药丸过滤 (_on_async_results_ready)。
+        """
         self._current_item_type = type_key
         self._nav_ensure_key = None
-        self.reload_local_data()
+        self.reload_data()
         self.search_edit.setFocus()
 
     def reload_local_data(self):

@@ -282,9 +282,10 @@ class MainWindow(QMainWindow):
         search_layout.addWidget(self.mode_toggle_btn)
 
         # 不再固定行高：Mode A 下布局仅此一行可见，自动撑满可用高度
-        # (窗口高 - 上下边距)，输入框由行内布局垂直居中，任何胶囊厚度都不偏移
+        # (窗口高 - 上下边距)，输入框由行内布局垂直居中，任何胶囊厚度都不偏移。
+        # 不加 AlignTop：胶囊被拖厚后多余空间会全掉到底部，行必须随布局垂直居中
         self.search_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.card_layout.addWidget(self.search_row, 0, Qt.AlignmentFlag.AlignTop)
+        self.card_layout.addWidget(self.search_row, 0)
 
         # 2. 核心结果表格 (去除分割线与筛选器，空间纯净呼吸，一体化悬浮呈现)
         self.table_view = QTableView()

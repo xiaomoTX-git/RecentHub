@@ -964,13 +964,15 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
         self.search_edit.setFocus()
-        self.search_edit.selectAll()
 
         # 若曾因 close() 停止过后台线程，此处复活，恢复 Tier2 异步全盘检索
         self._ensure_background_tasks()
 
-        # 唤醒时重建列表：隐藏期间 Mode A 会清空行缓存以省内存，
-        # 且期间可能有新的使用记录，不重载会出现"唤出后列表空白/过时"
+        # 每次唤醒都是全新会话：清空上次的关键词，绝不复现上一次的搜索结果。
+        # clear() 经 textChanged 链路自动 Tier1 重载 (Mode B 展示最近使用 /
+        # Mode A 空态，上下键再载入最近 150) 并撤销 Tier2 挂起任务与 loading 态；
+        # 再补一次 reload_data 兜底「文本本就为空」的唤醒路径 (clear 不发信号)
+        self.search_edit.clear()
         self.reload_data()
 
         # 唤出时高亮与视口复位至第0项 (与主流启动器一致，清爽如初)

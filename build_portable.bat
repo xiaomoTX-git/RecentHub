@@ -10,7 +10,13 @@ rem  NOTE: keep this file ASCII-only -- cmd.exe reads .bat with the
 rem  OEM codepage (GBK on zh-CN), so non-ASCII text breaks parsing.
 rem ============================================================
 
-set VERSION=1.1.0
+rem Derive APP_VERSION from app\core\version.py (single source of truth,
+rem so the zip name can never drift from the app's self-reported version)
+for /f %%A in ('powershell -NoProfile -Command "(Select-String -Path 'app\core\version.py' -Pattern 'APP_VERSION').Line.Split([char]34)[1]"') do set VERSION=%%A
+if not defined VERSION (
+    echo FAILED to read APP_VERSION from app\core\version.py
+    exit /b 1
+)
 
 echo ============================================
 echo   RecentHub Portable Build  v%VERSION%

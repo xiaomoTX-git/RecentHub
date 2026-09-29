@@ -321,6 +321,9 @@ class MainWindow(QMainWindow):
         self.table_view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerItem)
         self.table_view.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table_view.horizontalHeader().setHighlightSections(False)
+        # 表头文字与数据单元格同为左对齐：Qt 表头默认居中，窄列 (类型/最后使用)
+        # 上表头与左对齐的数据明显错位，视觉上像两套体系
+        self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         # 表头可点击排序 (Mode B)：仅开启点击与指示箭头，绝不启用 setSortingEnabled
         self.table_view.horizontalHeader().setSectionsClickable(True)
         self.table_view.horizontalHeader().setSortIndicatorShown(True)

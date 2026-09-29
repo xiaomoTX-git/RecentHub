@@ -4,4 +4,4 @@
 的 filevers/prodvers 保持同步。
 """
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"

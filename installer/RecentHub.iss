@@ -4,7 +4,7 @@
 ;   "C:\Users\<你>\AppData\Local\Programs\Inno Setup 6\ISCC.exe" installer\RecentHub.iss
 ;
 ; 前置：先由 PyInstaller 生成 dist\RecentHub\ (RecentHub.spec)
-; 产物：dist\installer\RecentHub_Setup_v1.2.0.exe
+; 产物：dist\installer\RecentHub_Setup_v1.2.1.exe
 ;
 ; 安装策略：当前用户级安装 (PrivilegesRequired=lowest)，全程无 UAC 弹窗。
 ;   此时 {autopf} 解析为 %LOCALAPPDATA%\Programs，程序目录天然可写；
@@ -12,7 +12,7 @@
 ;   %APPDATA%\RecentHub 与 %LOCALAPPDATA%\RecentHub，卸载时保留。
 
 #define AppName "RecentHub"
-#define AppVersion "1.2.0"
+#define AppVersion "1.2.1"
 #define AppExeName "RecentHub.exe"
 #define SourceDir "..\dist\RecentHub"
 
